@@ -4,7 +4,7 @@
   </a>
 </p>
 
-<h1 align="center">🚀 StarbaseDB</h1>
+<h1 align="center">StarbaseDB</h1>
 <p align="center">
   <i>Open source, scale-to-zero, HTTP SQLite database built on top of <a href="https://developers.cloudflare.com/durable-objects/" target="_blank">Cloudflare Durable Objects</a>.</i>
 </p>
