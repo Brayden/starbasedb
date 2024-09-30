@@ -1,15 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
+import { createResponse, QueryRequest } from './models/index';
 
-const AUTHORIZATION = 'Bearer ABC123';
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
-type QueryRequest = {
-    sql: string;
-    params?: any[];
-};
-
 export class DatabaseDurableObject extends DurableObject {
-    public sql: SqlStorage
+    public sql: SqlStorage;
 
 	/**
 	 * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
@@ -23,10 +18,51 @@ export class DatabaseDurableObject extends DurableObject {
         this.sql = ctx.storage.sql;
     }
 
+    constructQuery(sql: string, params?: any[]): string {
+        if (!params || params.length === 0) {
+            return sql;
+        }
+    
+        let paramIndex = 0;
+        return sql.replace(/\?/g, () => {
+            if (paramIndex >= params.length) {
+                throw new Error('Not enough parameters provided.');
+            }
+            const param = params[paramIndex++];
+            return this.escapeSqlValue(param);
+        });
+    }
+    
+    escapeSqlValue(value: any): string {
+        if (value === null || value === undefined) {
+            return 'NULL';
+        } else if (typeof value === 'number' || typeof value === 'bigint') {
+            if (!isFinite(value as number)) {
+                throw new Error('Invalid number value.');
+            }
+            return value.toString();
+        } else if (typeof value === 'boolean') {
+            return value ? '1' : '0';
+        } else if (typeof value === 'string') {
+            // Escape single quotes by doubling them
+            return `'${value.replace(/'/g, "''")}'`;
+        } else if (value instanceof Date) {
+            return `'${value.toISOString()}'`;
+        } else if (typeof value === 'object') {
+            // Serialize object or array to JSON string
+            const jsonString = JSON.stringify(value);
+            return `'${jsonString.replace(/'/g, "''")}'`;
+        } else {
+            throw new Error(`Unsupported parameter type: ${typeof value}`);
+        }
+    }
+
     async executeQuery(sql: string, params?: any[]): Promise<any[]> {
         try {
-            let cursor = this.sql.exec(sql).toArray();
-            return cursor;
+            const constructedSql = this.constructQuery(sql, params);
+            const cursor = this.sql.exec(constructedSql);
+            const result = cursor.toArray();
+            return result;
         } catch (error) {
             console.error('SQL Execution Error:', error);
             throw new Error('Database operation failed.');
@@ -35,31 +71,33 @@ export class DatabaseDurableObject extends DurableObject {
 
     async queryRoute(request: Request): Promise<Response> {
         try {
-            const { sql, params } = await request.json() as QueryRequest;
-
-            // Validate that the request body contains the necessary fields in the correct format
-            if (typeof sql !== 'string') {
-                return new Response('Invalid "sql" field.', { status: 400 });
-            } else if (params !== undefined && !Array.isArray(params)) {
-                return new Response('Invalid "params" field.', { status: 400 });
+            const contentType = request.headers.get('Content-Type') || '';
+            if (!contentType.includes('application/json')) {
+                return createResponse(undefined, 'Content-Type must be application/json.', 400);
             }
-
+    
+            const { sql, params } = await request.json() as QueryRequest;
+    
+            if (typeof sql !== 'string' || !sql.trim()) {
+                return createResponse(undefined, 'Invalid or empty "sql" field.', 400);
+            } else if (params !== undefined && !Array.isArray(params)) {
+                return createResponse(undefined, 'Invalid "params" field.', 400);
+            }
+    
             const result = await this.executeQuery(sql, params);
-            return new Response(JSON.stringify(result), {
-                headers: { 'Content-Type': 'application/json' },
-            });
-        } catch (error) {
-            return new Response(JSON.stringify({ error }), { status: 500 });
+            return createResponse(result, undefined, 200);
+        } catch (error: any) {
+            console.error('Query Route Error:', error);
+            return createResponse(undefined, 'An unexpected error occurred.', 500);
         }
     }
 
     async statusRoute(_: Request): Promise<Response> {
-        return new Response(JSON.stringify({ 
+        return createResponse({ 
             status: 'reachable',
             timestamp: Date.now(),
-            // availableDisk: await this.sql.getAvailableDisk(),
             usedDisk: await this.sql.databaseSize,
-        }));
+        }, undefined, 200)
     }
 
     async fetch(request: Request): Promise<Response> {
@@ -70,7 +108,7 @@ export class DatabaseDurableObject extends DurableObject {
         } else if (request.method === 'GET' && url.pathname === '/status') {
             return this.statusRoute(request);
         } else {
-            return new Response("Unknown operation", { status: 400 });
+            return createResponse(undefined, 'Unknown operation', 400);
         }
     }
 }
@@ -90,8 +128,8 @@ export default {
          * authorization checks here to ensure the request signature is valid and authorized to
          * interact with the Durable Object.
          */
-        if (request.headers.get('Authorization') !== AUTHORIZATION) {
-            return new Response('Unauthorized', { status: 401 });
+        if (request.headers.get('Authorization') !== `Bearer ${env.AUTHORIZATION_TOKEN}`) {
+            return createResponse(undefined, 'Unauthorized request', 401)
         }
 
         /**
