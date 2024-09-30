@@ -8,7 +8,7 @@
 <p align="center">
   <i>Open source, scale-to-zero, HTTP SQLite database built on top of <a href="https://developers.cloudflare.com/durable-objects/" target="_blank">Cloudflare Durable Objects</a>.</i>
 </p>
-
+<br />
 <h2>📦 How to Deploy</h2>
 <p>Deploying a new SQLite database instance to a Cloudflare Durable Object can be done in a matter of minutes:</p>
 
@@ -42,6 +42,7 @@ Current Version ID: d3e00de3-56b4-48b9-938d-a7cad57bb66a
 </code>
 </pre>
 
+<br />
 <h2>🛠️ Executing Queries</h2>
 <p>Start executing queries against your database with the following cURL commands:</p>
 
@@ -81,15 +82,19 @@ curl --location --request POST 'https://starbasedb.YOUR-ID-HERE.workers.dev/quer
 </code>
 </pre>
 
+<br />
 <h2>🤝 Contributing</h2>
 <p>We welcome contributions! Please refer to our <a href="./CONTRIBUTING.md">Contribution Guide</a> for more details.</p>
 
+<br />
 <h2>🔧 Why Are We Building This?</h2>
 <p>We want to give back to the community and make it simple to deploy your own scale-to-zero SQLite database. With the serverless architecture of durable objects, you can now have your application layer coexist on the same compute instance as your database.</p>
 
+<br />
 <h2>📄 License</h2>
 <p>This project is licensed under the MIT license. See the <a href="./LICENSE.txt">LICENSE</a> file for more info.</p>
 
+<br />
 <h2>👥 Contributors</h2>
 <p>
   <img align="left" src="https://contributors-img.web.app/image?repo=brayden/starbasedb" alt="Contributors"/>
