@@ -18,49 +18,16 @@ export class DatabaseDurableObject extends DurableObject {
         this.sql = ctx.storage.sql;
     }
 
-    constructQuery(sql: string, params?: any[]): string {
-        if (!params || params.length === 0) {
-            return sql;
-        }
-    
-        let paramIndex = 0;
-        return sql.replace(/\?/g, () => {
-            if (paramIndex >= params.length) {
-                throw new Error('Not enough parameters provided.');
-            }
-            const param = params[paramIndex++];
-            return this.escapeSqlValue(param);
-        });
-    }
-    
-    escapeSqlValue(value: any): string {
-        if (value === null || value === undefined) {
-            return 'NULL';
-        } else if (typeof value === 'number' || typeof value === 'bigint') {
-            if (!isFinite(value as number)) {
-                throw new Error('Invalid number value.');
-            }
-            return value.toString();
-        } else if (typeof value === 'boolean') {
-            return value ? '1' : '0';
-        } else if (typeof value === 'string') {
-            // Escape single quotes by doubling them
-            return `'${value.replace(/'/g, "''")}'`;
-        } else if (value instanceof Date) {
-            return `'${value.toISOString()}'`;
-        } else if (typeof value === 'object') {
-            // Serialize object or array to JSON string
-            const jsonString = JSON.stringify(value);
-            return `'${jsonString.replace(/'/g, "''")}'`;
-        } else {
-            throw new Error(`Unsupported parameter type: ${typeof value}`);
-        }
-    }
-
     async executeQuery(sql: string, params?: any[]): Promise<any[]> {
         try {
-            const constructedSql = this.constructQuery(sql, params);
-            const cursor = this.sql.exec(constructedSql);
+            let cursor;
+
+            if (params && params.length) {
+                cursor = this.sql.exec(sql, params);
+            } else {
+                cursor = this.sql.exec(sql);
+            }
+
             const result = cursor.toArray();
             return result;
         } catch (error) {
