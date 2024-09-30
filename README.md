@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://starbasedb.com">
-    <img alt="StarbaseDB – Scale-to-zero HTTP SQLite database" src="https://github.com/Brayden/starbasedb/banner.png" width="1280">
+    <img alt="StarbaseDB – Scale-to-zero HTTP SQLite database" src="https://github.com/Brayden/starbasedb/blob/main/banner.png?raw=true" width="1280">
   </a>
 </p>
 
