@@ -1,5 +1,9 @@
+export type QueryTransactionRequest = {
+    transaction?: QueryRequest[];
+}
+
 export type QueryRequest = {
-    sql: string;
+    sql?: string;
     params?: any[];
 };
 

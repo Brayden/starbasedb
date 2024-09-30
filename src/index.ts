@@ -1,10 +1,13 @@
 import { DurableObject } from "cloudflare:workers";
-import { createResponse, QueryRequest } from './utils';
+import { createResponse, QueryRequest, QueryTransactionRequest } from './utils';
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
 export class DatabaseDurableObject extends DurableObject {
     public sql: SqlStorage;
+    private transactionInProgress: boolean = false;
+    private transactionBookmark: any;
+    private transactionOwner: string | null = null;
 
 	/**
 	 * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
@@ -18,7 +21,54 @@ export class DatabaseDurableObject extends DurableObject {
         this.sql = ctx.storage.sql;
     }
 
-    async executeQuery(sql: string, params?: any[]): Promise<any[]> {
+    async executeTransaction(queries: { sql: string, params?: any[] }[], transactionId: string): Promise<any[]> {
+        if (this.transactionInProgress && this.transactionOwner !== transactionId) {
+            throw new Error('Another transaction is already in progress.');
+        }
+
+        console.log('executeTransaction', queries, transactionId);
+
+        if (!this.transactionInProgress) {
+            // Start the transaction
+            this.transactionInProgress = true;
+            this.transactionOwner = transactionId;
+            this.transactionBookmark = await this.ctx.storage.getCurrentBookmark();
+        }
+
+        const results = [];
+        try {
+            // Execute each query synchronously
+            for (const queryObj of queries) {
+                const { sql, params } = queryObj;
+                const result = this.executeQuery(sql, params);
+                results.push(result);
+            }
+
+            console.log('Results: ', results);
+
+            // Transaction successful, reset transaction state
+            this.transactionInProgress = false;
+            this.transactionOwner = null;
+            this.transactionBookmark = null;
+
+            return results;
+        } catch (error) {
+            console.error('Transaction Execution Error:', error);
+            // Rollback in case of error
+            try {
+                await this.ctx.storage.onNextSessionRestoreBookmark(this.transactionBookmark);
+                await this.ctx.abort();
+            } catch (rollbackError) {
+                console.error('Rollback Error:', rollbackError);
+            }
+            this.transactionInProgress = false;
+            this.transactionOwner = null;
+            this.transactionBookmark = null;
+            throw new Error('Transaction failed and was rolled back.');
+        }
+    }
+
+    executeQuery(sql: string, params?: any[]): any[] {
         try {
             let cursor;
 
@@ -43,9 +93,28 @@ export class DatabaseDurableObject extends DurableObject {
                 return createResponse(undefined, 'Content-Type must be application/json.', 400);
             }
     
-            const { sql, params } = await request.json() as QueryRequest;
+            const { sql, params, transaction } = await request.json() as QueryRequest & QueryTransactionRequest;
+            const transactionId = crypto.randomUUID();
+
+            console.log('Transaction: ', transaction)
     
-            if (typeof sql !== 'string' || !sql.trim()) {
+            if (Array.isArray(transaction) && transaction.length) {
+                const queries = transaction.map((queryObj: any) => {
+                    const { sql, params } = queryObj;
+
+                    if (typeof sql !== 'string' || !sql.trim()) {
+                        throw new Error('Invalid or empty "sql" field in transaction.');
+                    } else if (params !== undefined && !Array.isArray(params)) {
+                        throw new Error('Invalid "params" field in transaction.');
+                    }
+
+                    return { sql, params };
+                });
+
+                const result = await this.executeTransaction(queries, transactionId);
+                console.log('Final Results: ', result);
+                return createResponse(result, undefined, 200);
+            } else if (typeof sql !== 'string' || !sql.trim()) {
                 return createResponse(undefined, 'Invalid or empty "sql" field.', 400);
             } else if (params !== undefined && !Array.isArray(params)) {
                 return createResponse(undefined, 'Invalid "params" field.', 400);
