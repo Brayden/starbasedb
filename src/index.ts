@@ -22,7 +22,7 @@ export class DatabaseDurableObject extends DurableObject {
         try {
             let cursor;
 
-            if (params) {
+            if (params && params.length) {
                 cursor = this.sql.exec(sql, params);
             } else {
                 cursor = this.sql.exec(sql);
