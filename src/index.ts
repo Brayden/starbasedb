@@ -26,8 +26,6 @@ export class DatabaseDurableObject extends DurableObject {
             throw new Error('Another transaction is already in progress.');
         }
 
-        console.log('executeTransaction', queries, transactionId);
-
         if (!this.transactionInProgress) {
             // Start the transaction
             this.transactionInProgress = true;
@@ -43,8 +41,6 @@ export class DatabaseDurableObject extends DurableObject {
                 const result = this.executeQuery(sql, params);
                 results.push(result);
             }
-
-            console.log('Results: ', results);
 
             // Transaction successful, reset transaction state
             this.transactionInProgress = false;
@@ -95,8 +91,6 @@ export class DatabaseDurableObject extends DurableObject {
     
             const { sql, params, transaction } = await request.json() as QueryRequest & QueryTransactionRequest;
             const transactionId = crypto.randomUUID();
-
-            console.log('Transaction: ', transaction)
     
             if (Array.isArray(transaction) && transaction.length) {
                 const queries = transaction.map((queryObj: any) => {
@@ -112,7 +106,6 @@ export class DatabaseDurableObject extends DurableObject {
                 });
 
                 const result = await this.executeTransaction(queries, transactionId);
-                console.log('Final Results: ', result);
                 return createResponse(result, undefined, 200);
             } else if (typeof sql !== 'string' || !sql.trim()) {
                 return createResponse(undefined, 'Invalid or empty "sql" field.', 400);

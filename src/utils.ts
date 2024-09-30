@@ -3,7 +3,7 @@ export type QueryTransactionRequest = {
 }
 
 export type QueryRequest = {
-    sql?: string;
+    sql: string;
     params?: any[];
 };
 
