@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { createResponse, QueryRequest } from './models/index';
+import { createResponse, QueryRequest } from './utils';
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
