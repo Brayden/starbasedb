@@ -77,7 +77,8 @@ curl --location --request POST 'https://starbasedb.YOUR-ID-HERE.workers.dev/quer
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer ABC123' \
 --data-raw '{
-    "sql": "SELECT * FROM artist;"
+    "sql": "SELECT * FROM artist WHERE artistid=$1;",
+    "params": [123]
 }'
 </code>
 </pre>
