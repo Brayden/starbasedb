@@ -8,6 +8,15 @@
 <p align="center">
   <i>Open source, scale-to-zero, HTTP SQLite database built on top of <a href="https://developers.cloudflare.com/durable-objects/" target="_blank">Cloudflare Durable Objects</a>.</i>
 </p>
+
+<br />
+<h2>⚡ Features</h2>
+<ul>
+  <li>**HTTPS Endpoints** to interact with your database</li>
+  <li>**Transactions Support **for ACID database interactions</li>
+  <li>**Scale-to-zero Compute** when your database is not in use</li>
+</ul>
+
 <br />
 <h2>📦 How to Deploy</h2>
 <p>Deploying a new SQLite database instance to a Cloudflare Durable Object can be done in a matter of minutes:</p>

@@ -48,7 +48,7 @@ export class DatabaseDurableObject extends DurableObject {
         let transactionBookmark: any | null = null;
 
         try {
-            // Create a storage bookmark before starting the transaction
+            // Create a storage bookmark before starting the transaction.
             transactionBookmark = await this.ctx.storage.getCurrentBookmark();
 
             for (const queryObj of queries) {
@@ -62,10 +62,13 @@ export class DatabaseDurableObject extends DurableObject {
         } catch (error) {
             console.error('Transaction Execution Error:', error);
 
+            /**
+             * If an error occurs during the transaction, we can restore the storage to the state
+             * before the transaction began by using the bookmark we created before starting the
+             * transaction.
+             */
             if (transactionBookmark) {
-                // Restore the storage to the bookmark
                 await this.ctx.storage.onNextSessionRestoreBookmark(transactionBookmark);
-                // Abort the current session to rollback
                 await this.ctx.abort();
             }
 
