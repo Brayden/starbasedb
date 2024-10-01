@@ -5,9 +5,13 @@ const DURABLE_OBJECT_ID = 'sql-durable-object';
 
 export class DatabaseDurableObject extends DurableObject {
     public sql: SqlStorage;
-    private transactionInProgress: boolean = false;
-    private transactionBookmark: any;
-    private transactionOwner: string | null = null;
+    private operationQueue: Array<{
+        queries: { sql: string; params?: any[] }[];
+        isTransaction: boolean;
+        resolve: (value: Response) => void;
+        reject: (reason?: any) => void;
+    }> = [];
+    private processingOperation: boolean = false;
 
 	/**
 	 * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
@@ -19,49 +23,6 @@ export class DatabaseDurableObject extends DurableObject {
     constructor(ctx: DurableObjectState, env: Env) {
         super(ctx, env);
         this.sql = ctx.storage.sql;
-    }
-
-    async executeTransaction(queries: { sql: string, params?: any[] }[], transactionId: string): Promise<any[]> {
-        if (this.transactionInProgress && this.transactionOwner !== transactionId) {
-            throw new Error('Another transaction is already in progress.');
-        }
-
-        if (!this.transactionInProgress) {
-            // Start the transaction
-            this.transactionInProgress = true;
-            this.transactionOwner = transactionId;
-            this.transactionBookmark = await this.ctx.storage.getCurrentBookmark();
-        }
-
-        const results = [];
-        try {
-            // Execute each query synchronously
-            for (const queryObj of queries) {
-                const { sql, params } = queryObj;
-                const result = this.executeQuery(sql, params);
-                results.push(result);
-            }
-
-            // Transaction successful, reset transaction state
-            this.transactionInProgress = false;
-            this.transactionOwner = null;
-            this.transactionBookmark = null;
-
-            return results;
-        } catch (error) {
-            console.error('Transaction Execution Error:', error);
-            // Rollback in case of error
-            try {
-                await this.ctx.storage.onNextSessionRestoreBookmark(this.transactionBookmark);
-                await this.ctx.abort();
-            } catch (rollbackError) {
-                console.error('Rollback Error:', rollbackError);
-            }
-            this.transactionInProgress = false;
-            this.transactionOwner = null;
-            this.transactionBookmark = null;
-            throw new Error('Transaction failed and was rolled back.');
-        }
     }
 
     executeQuery(sql: string, params?: any[]): any[] {
@@ -78,7 +39,101 @@ export class DatabaseDurableObject extends DurableObject {
             return result;
         } catch (error) {
             console.error('SQL Execution Error:', error);
-            throw new Error('Database operation failed.');
+            throw error;
+        }
+    }
+
+    async executeTransaction(queries: { sql: string; params?: any[] }[]): any[] {
+        const results = [];
+        let transactionBookmark: any | null = null;
+
+        try {
+            // Create a storage bookmark before starting the transaction
+            transactionBookmark = await this.ctx.storage.getCurrentBookmark();
+
+            for (const queryObj of queries) {
+                const { sql, params } = queryObj;
+                const result = this.executeQuery(sql, params);
+                results.push(result);
+            }
+
+            transactionBookmark = null;
+            return results;
+        } catch (error) {
+            console.error('Transaction Execution Error:', error);
+
+            if (transactionBookmark) {
+                // Restore the storage to the bookmark
+                await this.ctx.storage.onNextSessionRestoreBookmark(transactionBookmark);
+                // Abort the current session to rollback
+                await this.ctx.abort();
+            }
+
+            throw error;
+        }
+    }
+
+    async enqueueOperation(
+        queries: { sql: string; params?: any[] }[],
+        isTransaction: boolean
+    ): Promise<Response> {
+        const MAX_WAIT_TIME = 25000;
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(createResponse(undefined, 'Operation timed out.', 503));
+            }, MAX_WAIT_TIME);
+
+            this.operationQueue.push({
+                queries,
+                isTransaction,
+                resolve: (value) => {
+                    clearTimeout(timeout);
+                    resolve(value);
+                },
+                reject: (reason) => {
+                    clearTimeout(timeout);
+                    reject(reason);
+                }
+            });
+
+            this.processNextOperation().catch((err) => {
+                console.error('Error processing operation queue:', err);
+            });
+        });
+    }
+
+    async processNextOperation() {
+        if (this.processingOperation) {
+            // Already processing an operation
+            return;
+        }
+
+        if (this.operationQueue.length === 0) {
+            // No operations remaining to process
+            return;
+        }
+
+        this.processingOperation = true;
+
+        const { queries, isTransaction, resolve, reject } = this.operationQueue.shift()!;
+
+        try {
+            let result;
+
+            if (isTransaction) {
+                result = await this.executeTransaction(queries);
+            } else {
+                const { sql, params } = queries[0];
+                result = this.executeQuery(sql, params);
+            }
+
+            resolve(createResponse(result, undefined, 200));
+        } catch (error: any) {
+            console.error('Operation Execution Error:', error);
+            reject(createResponse(undefined, error.message || 'Operation failed.', 500));
+        } finally {
+            this.processingOperation = false;
+            await this.processNextOperation();
         }
     }
 
@@ -90,7 +145,6 @@ export class DatabaseDurableObject extends DurableObject {
             }
     
             const { sql, params, transaction } = await request.json() as QueryRequest & QueryTransactionRequest;
-            const transactionId = crypto.randomUUID();
     
             if (Array.isArray(transaction) && transaction.length) {
                 const queries = transaction.map((queryObj: any) => {
@@ -105,16 +159,17 @@ export class DatabaseDurableObject extends DurableObject {
                     return { sql, params };
                 });
 
-                const result = await this.executeTransaction(queries, transactionId);
-                return createResponse(result, undefined, 200);
+                const response = await this.enqueueOperation(queries, true);
+                return response;
             } else if (typeof sql !== 'string' || !sql.trim()) {
                 return createResponse(undefined, 'Invalid or empty "sql" field.', 400);
             } else if (params !== undefined && !Array.isArray(params)) {
                 return createResponse(undefined, 'Invalid "params" field.', 400);
             }
     
-            const result = await this.executeQuery(sql, params);
-            return createResponse(result, undefined, 200);
+            const queries = [{ sql, params }];
+            const response = await this.enqueueOperation(queries, false);
+            return response;
         } catch (error: any) {
             console.error('Query Route Error:', error);
             return createResponse(undefined, 'An unexpected error occurred.', 500);
