@@ -43,7 +43,7 @@ export class DatabaseDurableObject extends DurableObject {
         }
     }
 
-    async executeTransaction(queries: { sql: string; params?: any[] }[]): any[] {
+    async executeTransaction(queries: { sql: string; params?: any[] }[]): Promise<any[]> {
         const results = [];
         let transactionBookmark: any | null = null;
 
