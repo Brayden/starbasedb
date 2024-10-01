@@ -12,9 +12,9 @@
 <br />
 <h2>⚡ Features</h2>
 <ul>
-  <li>**HTTPS Endpoints** to interact with your database</li>
-  <li>**Transactions Support **for ACID database interactions</li>
-  <li>**Scale-to-zero Compute** when your database is not in use</li>
+  <li><strong>HTTPS Endpoints</strong> to interact with your database</li>
+  <li><strong>Transactions Support</strong> for ACID database interactions</li>
+  <li><strong>Scale-to-zero Compute</strong> when your database is not in use</li>
 </ul>
 
 <br />
