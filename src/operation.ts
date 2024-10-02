@@ -1,13 +1,13 @@
-import { createResponse } from "./utils";
+import { createResponse } from './utils';
 
-export function executeQuery(_: any, sql: string, params?: any[]): any[] {
+export function executeQuery(sql: string, params: any[] | undefined, sqlInstance: any): any[] {
     try {
         let cursor;
-
+        
         if (params && params.length) {
-            cursor = _.sql.exec(sql, params);
+            cursor = sqlInstance.exec(sql, params);
         } else {
-            cursor = _.sql.exec(sql);
+            cursor = sqlInstance.exec(sql);
         }
 
         const result = cursor.toArray();
@@ -18,17 +18,17 @@ export function executeQuery(_: any, sql: string, params?: any[]): any[] {
     }
 }
 
-export async function executeTransaction(_: any, queries: { sql: string; params?: any[] }[]): Promise<any[]> {
+export async function executeTransaction(queries: { sql: string; params?: any[] }[], sqlInstance: any, ctx: any): Promise<any[]> {
     const results = [];
     let transactionBookmark: any | null = null;
 
     try {
         // Create a storage bookmark before starting the transaction.
-        transactionBookmark = await _.ctx.storage.getCurrentBookmark();
+        transactionBookmark = await ctx.storage.getCurrentBookmark();
 
         for (const queryObj of queries) {
             const { sql, params } = queryObj;
-            const result = executeQuery(_, sql, params);
+            const result = executeQuery(sql, params, sqlInstance);
             results.push(result);
         }
 
@@ -43,8 +43,8 @@ export async function executeTransaction(_: any, queries: { sql: string; params?
          * transaction.
          */
         if (transactionBookmark) {
-            await _.ctx.storage.onNextSessionRestoreBookmark(transactionBookmark);
-            await _.ctx.abort();
+            await ctx.storage.onNextSessionRestoreBookmark(transactionBookmark);
+            await ctx.abort();
         }
 
         throw error;
@@ -52,9 +52,10 @@ export async function executeTransaction(_: any, queries: { sql: string; params?
 }
 
 export async function enqueueOperation(
-    _: any,
     queries: { sql: string; params?: any[] }[],
-    isTransaction: boolean
+    isTransaction: boolean,
+    operationQueue: any[],
+    processNextOperation: () => Promise<void>
 ): Promise<Response> {
     const MAX_WAIT_TIME = 25000;
     return new Promise((resolve, reject) => {
@@ -62,48 +63,52 @@ export async function enqueueOperation(
             reject(createResponse(undefined, 'Operation timed out.', 503));
         }, MAX_WAIT_TIME);
 
-        _.operationQueue.push({
+        operationQueue.push({
             queries,
             isTransaction,
-            resolve: (value: any) => {
+            resolve: (value: Response) => {
                 clearTimeout(timeout);
                 resolve(value);
             },
-            reject: (reason: any) => {
+            reject: (reason?: any) => {
                 clearTimeout(timeout);
                 reject(reason);
             }
         });
 
-        processNextOperation(_).catch((err: any) => {
+        processNextOperation().catch((err) => {
             console.error('Error processing operation queue:', err);
         });
     });
 }
 
-export async function processNextOperation(_: any) {
-    if (_.processingOperation) {
+export async function processNextOperation(
+    sqlInstance: any,
+    operationQueue: any[],
+    ctx: any,
+    processingOperation: { value: boolean }
+) {
+    if (processingOperation.value) {
         // Already processing an operation
         return;
     }
 
-    if (_.operationQueue.length === 0) {
+    if (operationQueue.length === 0) {
         // No operations remaining to process
         return;
     }
 
-    _.processingOperation = true;
-
-    const { queries, isTransaction, resolve, reject } = _.operationQueue.shift()!;
+    processingOperation.value = true;
+    const { queries, isTransaction, resolve, reject } = operationQueue.shift()!;
 
     try {
         let result;
 
         if (isTransaction) {
-            result = await executeTransaction(_, queries);
+            result = await executeTransaction(queries, sqlInstance, ctx);
         } else {
             const { sql, params } = queries[0];
-            result = executeQuery(_, sql, params);
+            result = executeQuery(sql, params, sqlInstance);
         }
 
         resolve(createResponse(result, undefined, 200));
@@ -111,7 +116,7 @@ export async function processNextOperation(_: any) {
         console.error('Operation Execution Error:', error);
         reject(createResponse(undefined, error.message || 'Operation failed.', 500));
     } finally {
-        _.processingOperation = false;
-        await processNextOperation(_);
+        processingOperation.value = false;
+        await processNextOperation(sqlInstance, operationQueue, ctx, processingOperation);
     }
 }

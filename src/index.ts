@@ -1,18 +1,23 @@
 import { DurableObject } from "cloudflare:workers";
 import { createResponse, QueryRequest, QueryTransactionRequest } from './utils';
-import { enqueueOperation } from "./operation";
+import { enqueueOperation, processNextOperation } from './operation';
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
 export class DatabaseDurableObject extends DurableObject {
+    // Durable storage for the SQL database
     public sql: SqlStorage;
+
+    // Queue of operations to be processed, with each operation containing a list of queries to be executed
     private operationQueue: Array<{
         queries: { sql: string; params?: any[] }[];
         isTransaction: boolean;
         resolve: (value: Response) => void;
         reject: (reason?: any) => void;
     }> = [];
-    private processingOperation: boolean = false;
+
+    // Flag to indicate if an operation is currently being processed
+    private processingOperation: { value: boolean } = { value: false };
 
 	/**
 	 * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
@@ -48,7 +53,12 @@ export class DatabaseDurableObject extends DurableObject {
                     return { sql, params };
                 });
 
-                const response = await enqueueOperation(this, queries, true);
+                const response = await enqueueOperation(
+                    queries,
+                    true,
+                    this.operationQueue,
+                    () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+                );
                 return response;
             } else if (typeof sql !== 'string' || !sql.trim()) {
                 return createResponse(undefined, 'Invalid or empty "sql" field.', 400);
@@ -57,7 +67,12 @@ export class DatabaseDurableObject extends DurableObject {
             }
     
             const queries = [{ sql, params }];
-            const response = await enqueueOperation(this, queries, false);
+            const response = await enqueueOperation(
+                queries,
+                false,
+                this.operationQueue,
+                () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+            );
             return response;
         } catch (error: any) {
             console.error('Query Route Error:', error);
