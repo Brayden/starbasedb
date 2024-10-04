@@ -32,22 +32,14 @@ export function executeQuery(sql: string, params: any[] | undefined, isRaw: bool
         let result;
 
         if (isRaw) {
-            const results = cursor.toArray();
-            if (!results.length) {
-                return { columns: [], rows: [], meta: { rows_read: 0, rows_written: 0 } };
-            }
-
-            const columnNames = results.length ? Object.keys(results[0]) : [];
-            const rows = results.map((row: any) => Object.values(row));
-
             result = {
-                columns: columnNames,
-                rows: rows,
+                columns: cursor.columnNames,
+                rows: cursor.raw().toArray(),
                 meta: {
                     rows_read: cursor.rowsRead,
-                    rows_written: cursor.rowsWritten
-                }
-            };
+                    rows_written: cursor.rowsWritten,
+                },
+            };        
         } else {
             result = cursor.toArray();
         }
