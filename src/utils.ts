@@ -7,13 +7,13 @@ export type QueryRequest = {
     params?: any[];
 };
 
-export type QueryResponse = {
+export type ServerResponse = {
     result?: any[];
     error?: string;
     status: number;
 }
 
-export function createJSONResponse(data: QueryResponse): Response {
+export function createJSONResponse(data: ServerResponse): Response {
     return new Response(JSON.stringify({
         result: data.result,
     }), {
