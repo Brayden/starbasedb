@@ -113,6 +113,19 @@ curl --location --request POST 'https://starbasedb.YOUR-ID-HERE.workers.dev/quer
 </code>
 </pre>
 
+<h3>Raw Query Response</h3>
+<pre>
+<code>
+curl --location --request POST 'https://starbasedb.YOUR-ID-HERE.workers.dev/query/raw' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer ABC123' \
+--data-raw '{
+    "sql": "SELECT * FROM artist;",
+    "params": []
+}'
+</code>
+</pre>
+
 <br />
 <h2>🤝 Contributing</h2>
 <p>We welcome contributions! Please refer to our <a href="./CONTRIBUTING.md">Contribution Guide</a> for more details.</p>
