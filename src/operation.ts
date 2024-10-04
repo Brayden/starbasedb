@@ -1,6 +1,25 @@
 import { createResponse } from './utils';
 
-export function executeQuery(sql: string, params: any[] | undefined, sqlInstance: any): any[] {
+export type OperationQueueItem = {
+    queries: { sql: string; params?: any[] }[];
+    isTransaction: boolean;
+    isRaw: boolean;
+    resolve: (value: Response) => void;
+    reject: (reason?: any) => void;
+}
+
+export type RawQueryResponse = {
+    columns: string[];
+    rows: any[];
+    meta: {
+        rows_read: number;
+        rows_written: number;
+    }
+}
+
+export type QueryResponse = any[] | RawQueryResponse;
+
+export function executeQuery(sql: string, params: any[] | undefined, isRaw: boolean, sqlInstance: any): QueryResponse {
     try {
         let cursor;
         
@@ -10,7 +29,29 @@ export function executeQuery(sql: string, params: any[] | undefined, sqlInstance
             cursor = sqlInstance.exec(sql);
         }
 
-        const result = cursor.toArray();
+        let result;
+
+        if (isRaw) {
+            const results = cursor.toArray();
+            if (!results.length) {
+                return { columns: [], rows: [], meta: { rows_read: 0, rows_written: 0 } };
+            }
+
+            const columnNames = results.length ? Object.keys(results[0]) : [];
+            const rows = results.map((row: any) => Object.values(row));
+
+            result = {
+                columns: columnNames,
+                rows: rows,
+                meta: {
+                    rows_read: cursor.rowsRead,
+                    rows_written: cursor.rowsWritten
+                }
+            };
+        } else {
+            result = cursor.toArray();
+        }
+
         return result;
     } catch (error) {
         console.error('SQL Execution Error:', error);
@@ -18,7 +59,7 @@ export function executeQuery(sql: string, params: any[] | undefined, sqlInstance
     }
 }
 
-export async function executeTransaction(queries: { sql: string; params?: any[] }[], sqlInstance: any, ctx: any): Promise<any[]> {
+export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, sqlInstance: any, ctx: any): Promise<any[]> {
     const results = [];
     let transactionBookmark: any | null = null;
 
@@ -28,7 +69,7 @@ export async function executeTransaction(queries: { sql: string; params?: any[] 
 
         for (const queryObj of queries) {
             const { sql, params } = queryObj;
-            const result = executeQuery(sql, params, sqlInstance);
+            const result = executeQuery(sql, params, isRaw, sqlInstance);
             results.push(result);
         }
 
@@ -54,6 +95,7 @@ export async function executeTransaction(queries: { sql: string; params?: any[] 
 export async function enqueueOperation(
     queries: { sql: string; params?: any[] }[],
     isTransaction: boolean,
+    isRaw: boolean,
     operationQueue: any[],
     processNextOperation: () => Promise<void>
 ): Promise<Response> {
@@ -66,6 +108,7 @@ export async function enqueueOperation(
         operationQueue.push({
             queries,
             isTransaction,
+            isRaw,
             resolve: (value: Response) => {
                 clearTimeout(timeout);
                 resolve(value);
@@ -84,7 +127,7 @@ export async function enqueueOperation(
 
 export async function processNextOperation(
     sqlInstance: any,
-    operationQueue: any[],
+    operationQueue: OperationQueueItem[],
     ctx: any,
     processingOperation: { value: boolean }
 ) {
@@ -99,16 +142,16 @@ export async function processNextOperation(
     }
 
     processingOperation.value = true;
-    const { queries, isTransaction, resolve, reject } = operationQueue.shift()!;
+    const { queries, isTransaction, isRaw, resolve, reject } = operationQueue.shift()!;
 
     try {
         let result;
 
         if (isTransaction) {
-            result = await executeTransaction(queries, sqlInstance, ctx);
+            result = await executeTransaction(queries, isRaw, sqlInstance, ctx);
         } else {
             const { sql, params } = queries[0];
-            result = executeQuery(sql, params, sqlInstance);
+            result = executeQuery(sql, params, isRaw, sqlInstance);
         }
 
         resolve(createResponse(result, undefined, 200));

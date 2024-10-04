@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { createResponse, QueryRequest, QueryTransactionRequest } from './utils';
-import { enqueueOperation, processNextOperation } from './operation';
+import { enqueueOperation, OperationQueueItem, processNextOperation } from './operation';
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
@@ -9,12 +9,7 @@ export class DatabaseDurableObject extends DurableObject {
     public sql: SqlStorage;
 
     // Queue of operations to be processed, with each operation containing a list of queries to be executed
-    private operationQueue: Array<{
-        queries: { sql: string; params?: any[] }[];
-        isTransaction: boolean;
-        resolve: (value: Response) => void;
-        reject: (reason?: any) => void;
-    }> = [];
+    private operationQueue: Array<OperationQueueItem> = [];
 
     // Flag to indicate if an operation is currently being processed
     private processingOperation: { value: boolean } = { value: false };
@@ -31,7 +26,7 @@ export class DatabaseDurableObject extends DurableObject {
         this.sql = ctx.storage.sql;
     }
 
-    async queryRoute(request: Request): Promise<Response> {
+    async queryRoute(request: Request, isRaw: boolean): Promise<Response> {
         try {
             const contentType = request.headers.get('Content-Type') || '';
             if (!contentType.includes('application/json')) {
@@ -56,6 +51,7 @@ export class DatabaseDurableObject extends DurableObject {
                 const response = await enqueueOperation(
                     queries,
                     true,
+                    isRaw,
                     this.operationQueue,
                     () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
                 );
@@ -70,6 +66,7 @@ export class DatabaseDurableObject extends DurableObject {
             const response = await enqueueOperation(
                 queries,
                 false,
+                isRaw,
                 this.operationQueue,
                 () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
             );
@@ -91,8 +88,10 @@ export class DatabaseDurableObject extends DurableObject {
     async fetch(request: Request): Promise<Response> {
         const url = new URL(request.url);
 
-        if (request.method === 'POST' && url.pathname === '/query') {
-            return this.queryRoute(request);
+        if (request.method === 'POST' && url.pathname === '/query/raw') {
+            return this.queryRoute(request, true);
+        } else if (request.method === 'POST' && url.pathname === '/query') {
+            return this.queryRoute(request, false);
         } else if (request.method === 'GET' && url.pathname === '/status') {
             return this.statusRoute(request);
         } else {
