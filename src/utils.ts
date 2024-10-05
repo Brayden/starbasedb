@@ -1,6 +1,6 @@
 export type QueryTransactionRequest = {
     transaction?: QueryRequest[];
-}
+};
 
 export type QueryRequest = {
     sql: string;
@@ -11,7 +11,7 @@ export type QueryResponse = {
     result?: any[];
     error?: string;
     status: number;
-}
+};
 
 export function createJSONResponse(data: QueryResponse): Response {
     return new Response(JSON.stringify({
@@ -30,4 +30,4 @@ export function createResponse(result: any, error: string | undefined, status: n
         error,
         status,
     });
-};
+}
