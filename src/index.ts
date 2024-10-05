@@ -1,6 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 import { createResponse, QueryRequest, QueryTransactionRequest } from './utils';
 import { enqueueOperation, OperationQueueItem, processNextOperation } from './operation';
+import { LiteREST } from './literest';
+
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
@@ -13,6 +15,7 @@ export class DatabaseDurableObject extends DurableObject {
 
     // Flag to indicate if an operation is currently being processed
     private processingOperation: { value: boolean } = { value: false };
+    private liteREST: LiteREST;
 
 	/**
 	 * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
@@ -24,6 +27,8 @@ export class DatabaseDurableObject extends DurableObject {
     constructor(ctx: DurableObjectState, env: Env) {
         super(ctx, env);
         this.sql = ctx.storage.sql;
+                // Initialize LiteREST for handling /lite routes
+        this.liteREST = new LiteREST(ctx);
     }
 
     async queryRoute(request: Request, isRaw: boolean): Promise<Response> {
@@ -94,6 +99,10 @@ export class DatabaseDurableObject extends DurableObject {
             return this.queryRoute(request, false);
         } else if (request.method === 'GET' && url.pathname === '/status') {
             return this.statusRoute(request);
+        } else if (url.pathname.startsWith('/lite')) {
+            // Route /lite requests to LiteREST for handling
+            const liteRequest = new Request(request.url.replace('/lite', ''), request);
+            return this.liteREST.handleRequest(liteRequest);
         } else {
             return createResponse(undefined, 'Unknown operation', 400);
         }
