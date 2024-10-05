@@ -1,3 +1,5 @@
+// utils.ts
+
 export type QueryTransactionRequest = {
     transaction?: QueryRequest[];
 };
@@ -16,6 +18,7 @@ export type QueryResponse = {
 export function createJSONResponse(data: QueryResponse): Response {
     return new Response(JSON.stringify({
         result: data.result,
+        error: data.error,
     }), {
         status: data.status,
         headers: {
