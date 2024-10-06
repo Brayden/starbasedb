@@ -24,7 +24,7 @@ export function executeQuery(sql: string, params: any[] | undefined, isRaw: bool
         let cursor;
         
         if (params && params.length) {
-            cursor = sqlInstance.exec(sql, params);
+            cursor = sqlInstance.exec(sql, ...params);
         } else {
             cursor = sqlInstance.exec(sql);
         }
