@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { createResponse, QueryRequest, QueryTransactionRequest } from './utils';
+import { createResponse, createResponseFromOperationResponse, QueryRequest, QueryTransactionRequest } from './utils';
 import { enqueueOperation, OperationQueueItem, processNextOperation } from './operation';
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
@@ -13,6 +13,9 @@ export class DatabaseDurableObject extends DurableObject {
 
     // Flag to indicate if an operation is currently being processed
     private processingOperation: { value: boolean } = { value: false };
+
+    // Socket server for websocket communication
+    private connections = new Map<string, WebSocket>();
 
 	/**
 	 * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
@@ -55,7 +58,7 @@ export class DatabaseDurableObject extends DurableObject {
                     this.operationQueue,
                     () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
                 );
-                return response;
+                return createResponseFromOperationResponse(response);
             } else if (typeof sql !== 'string' || !sql.trim()) {
                 return createResponse(undefined, 'Invalid or empty "sql" field.', 400);
             } else if (params !== undefined && !Array.isArray(params)) {
@@ -70,10 +73,10 @@ export class DatabaseDurableObject extends DurableObject {
                 this.operationQueue,
                 () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
             );
-            return response;
+            return createResponseFromOperationResponse(response);
         } catch (error: any) {
             console.error('Query Route Error:', error);
-            return createResponse(undefined, 'An unexpected error occurred.', 500);
+            return createResponse(undefined, error.message || 'An unexpected error occurred.', 500);
         }
     }
 
@@ -92,11 +95,46 @@ export class DatabaseDurableObject extends DurableObject {
             return this.queryRoute(request, true);
         } else if (request.method === 'POST' && url.pathname === '/query') {
             return this.queryRoute(request, false);
+        } else if (url.pathname === '/socket') {
+            return this.clientConnected();
         } else if (request.method === 'GET' && url.pathname === '/status') {
             return this.statusRoute(request);
         } else {
             return createResponse(undefined, 'Unknown operation', 400);
         }
+    }
+
+    clientConnected() {
+        const webSocketPair = new WebSocketPair();
+        const [client, server] = Object.values(webSocketPair);
+        const wsSessionId = crypto.randomUUID();
+
+        this.ctx.acceptWebSocket(server, [wsSessionId]);
+        this.connections.set(wsSessionId, client);
+
+        return new Response(null, { status: 101, webSocket: client });
+    }
+
+    async webSocketMessage(ws: WebSocket, message: any) {
+        const { sql, params, action } = JSON.parse(message);
+    
+        if (action === 'query') {
+            const queries = [{ sql, params }];
+            const response = await enqueueOperation(
+                queries,
+                false,
+                false,
+                this.operationQueue,
+                () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+            );
+
+            ws.send(JSON.stringify(response.result));
+        }
+    }
+
+    async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean) {
+        // If the client closes the connection, the runtime will invoke the webSocketClose() handler.
+        ws.close(code, "StarbaseDB is closing WebSocket connection");
     }
 }
 
@@ -110,13 +148,26 @@ export default {
 	 * @returns The response to be sent back to the client
 	 */
 	async fetch(request, env, ctx): Promise<Response> {
+        const isWebSocket = request.headers.get("Upgrade") === "websocket";
+
         /**
          * Prior to proceeding to the Durable Object, we can perform any necessary validation or
          * authorization checks here to ensure the request signature is valid and authorized to
          * interact with the Durable Object.
          */
-        if (request.headers.get('Authorization') !== `Bearer ${env.AUTHORIZATION_TOKEN}`) {
+        if (request.headers.get('Authorization') !== `Bearer ${env.AUTHORIZATION_TOKEN}` && !isWebSocket) {
             return createResponse(undefined, 'Unauthorized request', 401)
+        } else if (isWebSocket) {
+            /**
+             * Web socket connections cannot pass in an Authorization header into their requests,
+             * so we can use a query parameter to validate the connection.
+             */
+            const url = new URL(request.url);
+            const token = url.searchParams.get('token');
+
+            if (token !== env.AUTHORIZATION_TOKEN) {
+                return new Response('WebSocket connections are not supported at this endpoint.', { status: 440 });
+            }
         }
 
         /**
