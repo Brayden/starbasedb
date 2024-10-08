@@ -52,36 +52,22 @@ export function executeQuery(sql: string, params: any[] | undefined, isRaw: bool
 }
 
 export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, sqlInstance: any, ctx: any): Promise<any[]> {
-    const results = [];
-    let transactionBookmark: any | null = null;
+    return ctx.storage.transactionSync(() => {
+        const results = [];
 
-    try {
-        // Create a storage bookmark before starting the transaction.
-        transactionBookmark = await ctx.storage.getCurrentBookmark();
+        try {
+            for (const queryObj of queries) {
+                const { sql, params } = queryObj;
+                const result = executeQuery(sql, params, isRaw, sqlInstance);
+                results.push(result);
+            }
 
-        for (const queryObj of queries) {
-            const { sql, params } = queryObj;
-            const result = executeQuery(sql, params, isRaw, sqlInstance);
-            results.push(result);
+            return results;
+        } catch (error) {
+            console.error('Transaction Execution Error:', error);
+            throw error;
         }
-
-        transactionBookmark = null;
-        return results;
-    } catch (error) {
-        console.error('Transaction Execution Error:', error);
-
-        /**
-         * If an error occurs during the transaction, we can restore the storage to the state
-         * before the transaction began by using the bookmark we created before starting the
-         * transaction.
-         */
-        if (transactionBookmark) {
-            await ctx.storage.onNextSessionRestoreBookmark(transactionBookmark);
-            await ctx.abort();
-        }
-
-        throw error;
-    }
+    });
 }
 
 export async function enqueueOperation(
