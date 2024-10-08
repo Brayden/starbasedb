@@ -13,8 +13,19 @@
 <h2>⚡ Features</h2>
 <ul>
   <li><strong>HTTPS Endpoints</strong> to interact with your database</li>
+  <li><strong>Web Socket Connections</strong> to query your database with sockets</li>
   <li><strong>Transactions Support</strong> for ACID database interactions</li>
   <li><strong>Scale-to-zero Compute</strong> when your database is not in use</li>
+</ul>
+
+<br />
+<h2>🚧 Roadmap</h2>
+<ul>
+  <li><strong>Point in Time Rollbacks</strong> for rolling back your database to any minute in the past 30 days</li>
+  <li><strong>Data Replication</strong> to scale reads beyond the 1,000 RPS limitation</li>
+  <li><strong>Data Streaming</strong> for streaming responses back as rows are read</li>
+  <li><strong>Download Data</strong> as a CSV, JSON or SQLite file</li>
+  <li><strong>Data Syncing</strong> between local source and your database</li>
 </ul>
 
 <br />
@@ -124,6 +135,51 @@ curl --location --request POST 'https://starbasedb.YOUR-ID-HERE.workers.dev/quer
     "params": []
 }'
 </code>
+</pre>
+
+<h3>Web Sockets</h3>
+Below is an example HTML script function showing how you can connect via Web Sockets.
+<pre>
+<code>let socket;
+
+function connectWebSocket() {
+    logMessage("Connecting to WebSocket...");
+    
+    socket = new WebSocket('wss://starbasedb.YOUR-ID-HERE.workers.dev/socket?token=ABC123');
+
+    socket.onopen = function() {
+        logMessage("WebSocket connection opened.");
+    };
+
+    socket.onmessage = function(event) {
+        logMessage("Received: " + event.data);
+    };
+
+    socket.onclose = function(event) {
+        logMessage(`WebSocket closed with code: ${event.code}, reason: ${event.reason}`);
+    };
+
+    socket.onerror = function(error) {
+        logMessage("WebSocket error: " + error.message);
+    };
+}
+
+function sendMessage() {
+    const message = document.getElementById('messageInput').value;
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        logMessage("Sending: " + message);
+
+        socket.send(JSON.stringify({
+            sql: message,
+            params: [],
+            action: 'query'
+        }));
+    } else {
+        logMessage("WebSocket is not open.");
+    }
+}
+
+window.onload = connectWebSocket;</code>
 </pre>
 
 <br />
