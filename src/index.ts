@@ -15,6 +15,9 @@ export class DatabaseDurableObject extends DurableObject {
     // Flag to indicate if an operation is currently being processed
     private processingOperation: { value: boolean } = { value: false };
 
+    // Map of WebSocket connections to their corresponding session IDs
+    private connections = new Map<string, WebSocket>();
+
 	/**
 	 * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
 	 * 	`DurableObjectStub::get` for a given identifier (no-op constructors can be omitted)
@@ -118,6 +121,7 @@ export class DatabaseDurableObject extends DurableObject {
         const wsSessionId = crypto.randomUUID();
 
         this.ctx.acceptWebSocket(server, [wsSessionId]);
+        this.connections.set(wsSessionId, client);
 
         return new Response(null, { status: 101, webSocket: client });
     }
@@ -142,6 +146,13 @@ export class DatabaseDurableObject extends DurableObject {
     async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean) {
         // If the client closes the connection, the runtime will invoke the webSocketClose() handler.
         ws.close(code, "StarbaseDB is closing WebSocket connection");
+
+        // Remove the WebSocket connection from the map
+        const tags = this.ctx.getTags(ws);
+        if (tags.length) {
+            const wsSessionId = tags[0];
+            this.connections.delete(wsSessionId);
+        }
     }
 }
 
