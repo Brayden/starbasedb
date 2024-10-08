@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { createResponse, QueryRequest, QueryTransactionRequest } from './utils';
 import { enqueueOperation, OperationQueueItem, processNextOperation } from './operation';
+import handleStudioRequest from "./studio";
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
@@ -110,6 +111,14 @@ export default {
 	 * @returns The response to be sent back to the client
 	 */
 	async fetch(request, env, ctx): Promise<Response> {
+        if (env.STUDIO_USER && env.STUDIO_PASS && request.method === 'GET' && new URL(request.url).pathname === '/studio') {
+            return handleStudioRequest(request, {
+                username: env.STUDIO_USER,
+                password: env.STUDIO_PASS, 
+                apiToken: env.AUTHORIZATION_TOKEN
+            });
+        }
+
         /**
          * Prior to proceeding to the Durable Object, we can perform any necessary validation or
          * authorization checks here to ensure the request signature is valid and authorized to

@@ -2,7 +2,7 @@
 name = "starbasedb"
 main = "src/index.ts"
 compatibility_date = "2024-09-25"
-account_id = ""
+account_id = "daaf37dd8fa42286a9cc04672d617e36"
 
 # Workers Logs
 # Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
@@ -25,3 +25,5 @@ new_sqlite_classes = ["DatabaseDurableObject"] # Array of new classes
 
 [vars]
 AUTHORIZATION_TOKEN = "ABC123"
+STUDIO_USER = "admin"
+STUDIO_PASS = "123456"
