@@ -25,3 +25,8 @@ new_sqlite_classes = ["DatabaseDurableObject"] # Array of new classes
 
 [vars]
 AUTHORIZATION_TOKEN = "ABC123"
+
+# Uncomment the section below to create a user for logging into your database UI.
+# You can access the Studio UI at: https://your_endpoint/studio
+# STUDIO_USER = "admin"
+# STUDIO_PASS = "123456"

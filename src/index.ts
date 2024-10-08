@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { createResponse, createResponseFromOperationResponse, QueryRequest, QueryTransactionRequest } from './utils';
 import { enqueueOperation, OperationQueueItem, processNextOperation } from './operation';
+import handleStudioRequest from "./studio";
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
@@ -149,6 +150,20 @@ export default {
 	 */
 	async fetch(request, env, ctx): Promise<Response> {
         const isWebSocket = request.headers.get("Upgrade") === "websocket";
+
+        /**
+         * If the request is a GET request to the /studio endpoint, we can handle the request
+         * directly in the Worker to avoid the need to deploy a separate Worker for the Studio.
+         * Studio provides a user interface to interact with the SQLite database in the Durable
+         * Object.
+         */
+        if (env.STUDIO_USER && env.STUDIO_PASS && request.method === 'GET' && new URL(request.url).pathname === '/studio') {
+            return handleStudioRequest(request, {
+                username: env.STUDIO_USER,
+                password: env.STUDIO_PASS, 
+                apiToken: env.AUTHORIZATION_TOKEN
+            });
+        }
 
         /**
          * Prior to proceeding to the Durable Object, we can perform any necessary validation or
