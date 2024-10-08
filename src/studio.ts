@@ -41,7 +41,17 @@ function createStudioHTML(apiToken: string): string {
                 "Authorization": "Bearer ${apiToken}"
             },
             body: JSON.stringify(requestBody)
-        }).then(r => r.json()).then(r => {
+        }).then(r => {
+            if (!r.ok) {
+                document.getElementById('editor').contentWindow.postMessage({
+                    id: e.data.id,
+                    type: e.data.type,
+                    error: "Something went wrong",
+                }, "*");
+                throw new Error("Something went wrong");
+            }
+            return r.json()
+        }).then(r => {
             const response = {
                 id: e.data.id,
                 type: e.data.type,
@@ -49,7 +59,7 @@ function createStudioHTML(apiToken: string): string {
             };
 
             document.getElementById('editor').contentWindow.postMessage(response, "*");
-        }).catch(console.log)
+        }).catch(console.error)
     }
 
     function transformRawResult(raw) {
