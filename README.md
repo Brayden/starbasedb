@@ -125,7 +125,8 @@ curl --location --request POST 'https://starbasedb.YOUR-ID-HERE.workers.dev/quer
 </pre>
 
 <h3>Raw Query Response</h3>
-```
+<pre>
+<code>
 curl --location --request POST 'https://starbasedb.YOUR-ID-HERE.workers.dev/query/raw' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer ABC123' \
@@ -133,7 +134,8 @@ curl --location --request POST 'https://starbasedb.YOUR-ID-HERE.workers.dev/quer
     "sql": "SELECT * FROM artist;",
     "params": []
 }'
-```
+</code>
+</pre>
 
 <h3>Web Sockets</h3>
 Below is an example HTML script function showing how you can connect via Web Sockets.
