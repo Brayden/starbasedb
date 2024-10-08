@@ -125,7 +125,7 @@ curl --location --request POST 'https://starbasedb.YOUR-ID-HERE.workers.dev/quer
 </pre>
 
 <h3>Raw Query Response</h3>
-```bash
+```
 curl --location --request POST 'https://starbasedb.YOUR-ID-HERE.workers.dev/query/raw' \
 --header 'Content-Type: application/json' \
 --header 'Authorization: Bearer ABC123' \
