@@ -16,6 +16,7 @@ export type ServerResponse = {
 export function createJSONResponse(data: ServerResponse): Response {
     return new Response(JSON.stringify({
         result: data.result,
+        error: data.error,
     }), {
         status: data.status,
         headers: {
@@ -31,3 +32,7 @@ export function createResponse(result: any, error: string | undefined, status: n
         status,
     });
 };
+
+export function createResponseFromOperationResponse(response: { result?: any, error?: string | undefined, status: number }): Response {
+    return createResponse(response.result, response.error, response.status);
+}

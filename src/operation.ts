@@ -4,7 +4,7 @@ export type OperationQueueItem = {
     queries: { sql: string; params?: any[] }[];
     isTransaction: boolean;
     isRaw: boolean;
-    resolve: (value: Response) => void;
+    resolve: (value: any) => void;
     reject: (reason?: any) => void;
 }
 
@@ -76,7 +76,7 @@ export async function enqueueOperation(
     isRaw: boolean,
     operationQueue: any[],
     processNextOperation: () => Promise<void>
-): Promise<Response> {
+): Promise<{ result?: any, error?: string | undefined, status: number }> {
     const MAX_WAIT_TIME = 25000;
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -87,13 +87,23 @@ export async function enqueueOperation(
             queries,
             isTransaction,
             isRaw,
-            resolve: (value: Response) => {
+            resolve: (value: any) => {
                 clearTimeout(timeout);
-                resolve(value);
+
+                resolve({
+                    result: value,
+                    error: undefined,
+                    status: 200
+                })
             },
             reject: (reason?: any) => {
                 clearTimeout(timeout);
-                reject(reason);
+
+                reject({
+                    result: undefined,
+                    error: reason ?? 'Operation failed.',
+                    status: 500
+                })
             }
         });
 
@@ -132,10 +142,9 @@ export async function processNextOperation(
             result = executeQuery(sql, params, isRaw, sqlInstance);
         }
 
-        resolve(createResponse(result, undefined, 200));
+        resolve(result);
     } catch (error: any) {
-        console.error('Operation Execution Error:', error);
-        reject(createResponse(undefined, error.message || 'Operation failed.', 500));
+        reject(error.message || 'Operation failed.');
     } finally {
         processingOperation.value = false;
         await processNextOperation(sqlInstance, operationQueue, ctx, processingOperation);
