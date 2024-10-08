@@ -15,9 +15,6 @@ export class DatabaseDurableObject extends DurableObject {
     // Flag to indicate if an operation is currently being processed
     private processingOperation: { value: boolean } = { value: false };
 
-    // Socket server for websocket communication
-    private connections = new Map<string, WebSocket>();
-
 	/**
 	 * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
 	 * 	`DurableObjectStub::get` for a given identifier (no-op constructors can be omitted)
@@ -52,32 +49,42 @@ export class DatabaseDurableObject extends DurableObject {
                     return { sql, params };
                 });
 
-                const response = await enqueueOperation(
-                    queries,
-                    true,
-                    isRaw,
-                    this.operationQueue,
-                    () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
-                );
-                return createResponseFromOperationResponse(response);
+                try {
+                    const response = await enqueueOperation(
+                        queries,
+                        true,
+                        isRaw,
+                        this.operationQueue,
+                        () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+                    );
+
+                    return createResponseFromOperationResponse(response);
+                } catch (error: any) {
+                    return createResponse(undefined, error.error || 'An unexpected error occurred.', error.status || 500);
+                }
             } else if (typeof sql !== 'string' || !sql.trim()) {
                 return createResponse(undefined, 'Invalid or empty "sql" field.', 400);
             } else if (params !== undefined && !Array.isArray(params)) {
                 return createResponse(undefined, 'Invalid "params" field.', 400);
             }
-    
-            const queries = [{ sql, params }];
-            const response = await enqueueOperation(
-                queries,
-                false,
-                isRaw,
-                this.operationQueue,
-                () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
-            );
-            return createResponseFromOperationResponse(response);
+
+            try {
+                const queries = [{ sql, params }];
+                const response = await enqueueOperation(
+                    queries,
+                    false,
+                    isRaw,
+                    this.operationQueue,
+                    () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+                );
+                
+                return createResponseFromOperationResponse(response);
+            } catch (error: any) {
+                return createResponse(undefined, error.error || 'An unexpected error occurred.', error.status || 500);
+            }
         } catch (error: any) {
             console.error('Query Route Error:', error);
-            return createResponse(undefined, error.message || 'An unexpected error occurred.', 500);
+            return createResponse(undefined, error || 'An unexpected error occurred.', 500);
         }
     }
 
@@ -111,7 +118,6 @@ export class DatabaseDurableObject extends DurableObject {
         const wsSessionId = crypto.randomUUID();
 
         this.ctx.acceptWebSocket(server, [wsSessionId]);
-        this.connections.set(wsSessionId, client);
 
         return new Response(null, { status: 101, webSocket: client });
     }

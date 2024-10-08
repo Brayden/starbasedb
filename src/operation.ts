@@ -144,8 +144,7 @@ export async function processNextOperation(
 
         resolve(result);
     } catch (error: any) {
-        console.error('Operation Execution Error:', error);
-        reject(error || 'Operation failed.');
+        reject(error.message || 'Operation failed.');
     } finally {
         processingOperation.value = false;
         await processNextOperation(sqlInstance, operationQueue, ctx, processingOperation);
