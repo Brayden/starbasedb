@@ -139,8 +139,9 @@ curl --location --request POST 'https://starbasedb.YOUR-ID-HERE.workers.dev/quer
 
 <h3>Web Sockets</h3>
 Below is an example HTML script function showing how you can connect via Web Sockets.
-<pre>
-<code>let socket;
+
+```javascript
+let socket;
 
 function connectWebSocket() {
     logMessage("Connecting to WebSocket...");
@@ -179,8 +180,8 @@ function sendMessage() {
     }
 }
 
-window.onload = connectWebSocket;</code>
-</pre>
+window.onload = connectWebSocket;
+```
 
 <br />
 <h2>🤝 Contributing</h2>
