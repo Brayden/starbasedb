@@ -9,61 +9,92 @@
   <i>Open source, scale-to-zero, HTTP SQLite database built on top of <a href="https://developers.cloudflare.com/durable-objects/" target="_blank">Cloudflare Durable Objects</a>.</i>
 </p>
 
-<br />
-<h2>⚡ Features</h2>
-<ul>
-  <li><strong>HTTPS Endpoints</strong> to interact with your database</li>
-  <li><strong>Web Socket Connections</strong> to query your database with sockets</li>
-  <li><strong>Transactions Support</strong> for ACID database interactions</li>
-  <li><strong>Scale-to-zero Compute</strong> when your database is not in use</li>
-</ul>
+<div align="center">
+  <a href="https://github.com/Brayden/starbasedb/releases"><img src="https://img.shields.io/github/v/release/Brayden/starbasedb?display_name=tag&style=flat"></img></a>
+  <a href="https://twitter.com/BraydenWilmoth"><img src="https://img.shields.io/static/v1?label=Website&message=StarbaseDB&color=%23be185d&style=flat"></img></a>
+  <a href="https://twitter.com/BraydenWilmoth"><img src="https://img.shields.io/static/v1?label=Follow&message=@BraydenWilmoth&color=blue&style=flat"></img></a>
+  <a href="https://discord.gg/k2J7jcJCvd"><img src="https://img.shields.io/static/v1?label=Join us on&message=Discord&color=blue&style=flat"></img></a>
+  <a href="https://outerbase.com"><img src="https://img.shields.io/static/v1?label=Check out&message=Outerbase&color=black&style=flat"></img></a>
+</div>
 
 <br />
-<h2>🚧 Roadmap</h2>
+<h2>Features</h2>
+<ul>
+  <li><strong><a href="https://github.com/Brayden/starbasedb/edit/main/README.md#executing-queries">HTTPS Endpoints</a></strong> to query & interact with your database</li>
+  <li><strong><a href="https://github.com/Brayden/starbasedb?tab=readme-ov-file#web-sockets">Web Socket Connections</a></strong> to query your database with low-latency web sockets</li>
+  <li><strong><a href="https://github.com/Brayden/starbasedb?tab=readme-ov-file#transactions">Transactions Support</a></strong> for executing interdependent collections of queries</li>
+  <li><strong><a href="https://github.com/Brayden/starbasedb/edit/main/README.md#deploy-a-starbasedb">Database Interface</a></strong> included out of the box deployed with your Cloudflare Worker</li>
+  <li><strong>Scale-to-zero Compute</strong> to reduce costs when your database is not in use</li>
+</ul>
+<br />
+<p>Throughout building this offering we are documenting as much of the journey as possible. Join us in our adventure and join the conversation on talking through our design decisions as we continue to move fast. Find more details on how we implement core features <a href="https://starbasedb.com/blog/">on our blog</a>.</p>
+
+<br />
+<h2>Roadmap</h2>
 <ul>
   <li><strong>Point in Time Rollbacks</strong> for rolling back your database to any minute in the past 30 days</li>
   <li><strong>Data Replication</strong> to scale reads beyond the 1,000 RPS limitation</li>
   <li><strong>Data Streaming</strong> for streaming responses back as rows are read</li>
-  <li><strong>Download Data</strong> as a CSV, JSON or SQLite file</li>
   <li><strong>Data Syncing</strong> between local source and your database</li>
+  <li><strong>Export Data</strong> as a CSV, JSON or SQLite file</li>
 </ul>
 
 <br />
-<h2>📦 How to Deploy</h2>
-<p>Deploying a new SQLite database instance to a Cloudflare Durable Object can be done in a matter of minutes:</p>
+<p>The above list is not an exhaustive list of features planned, but a glimpse at the direction we have in mind. We welcome any and all ideas from the community on what features or issues you would like to see be included as part of StarbaseDB. You can create new <a href="https://github.com/Brayden/starbasedb/issues/new?assignees=&labels=&projects=&template=bug_report.md&title=">Bug Reports</a> and <a href="https://github.com/Brayden/starbasedb/issues/new?assignees=&labels=&projects=&template=feature_request.md&title=">Feature Requests</a> and each will be reviewed.</p>
 
-<ol>
-  <li>Clone this repository:<br>
-    <code>git clone git@github.com:Brayden/starbasedb.git</code>
-  </li>
-  <li>Update the <code>AUTHORIZATION_TOKEN</code> value in the <code>wrangler.toml</code> file to be a private value shared only with those who should have access to your database, treat it like an API token.</li>
-  <li>Run the typegen command:<br>
-    <code>npm run cf-typegen</code>
-  </li>
-  <li>Deploy your worker:<br>
-    <code>npm run deploy</code>
-  </li>
-</ol>
+<br />
+<h2>Deploy a StarbaseDB</h2>
+<p>Deploying a new SQLite database instance to a Cloudflare Durable Object can be done via a single command:</p>
+
+```bash
+curl https://starbasedb.com/install.sh | bash
+```
+
+<p>
+  The above command will create two new resources in your Cloudflare account, a Worker and a Durable Object.
+  Your Worker will be what clients make network requests to for fetching data from your database, and the Durable
+  Object itself is the SQLite storage.
+</p>
 
 <p>After your worker has been deployed, you'll receive a console message similar to the one below:</p>
 
 <pre>
 <code>
-Total Upload: 4.59 KiB / gzip: 1.67 KiB
-Your worker has access to the following bindings:
-- Durable Objects:
-  - DATABASE_DURABLE_OBJECT: DatabaseDurableObject
-- Vars:
-  - AUTHORIZATION_TOKEN: "ABC123"
-Uploaded starbasedb (2.94 sec)
-Deployed starbasedb triggers (0.20 sec)
-  https://starbasedb.YOUR-ID-HERE.workers.dev
-Current Version ID: d3e00de3-56b4-48b9-938d-a7cad57bb66a
+==========================================
+Welcome to the StarbaseDB installation script!
+ 
+This script will deploy a Cloudflare Worker and create an Outerbase Starlink session.
+If you don't have a paid Cloudflare account, your deployment will fail.
+ 
+IMPORTANT: You _MUST_ have a paid Cloudflare account to use SQLite in Durable Objects.
+==========================================
+ 
+Cloning the repository...
+ 
+Please enter your Cloudflare account_id (from 'wrangler whoami' or the Cloudflare dashboard):
+{{YOUR_ACCOUNT_ID}}
+ 
+Deploying your worker...
+Worker deployed successfully at https://starbasedb.{YOUR-IDENTIFIER}.workers.dev.
+ 
+==========================================
+ 
+Outerbase Studio user account created!
+Use the following URL to view your database:
+
+https://starbasedb.{YOUR-IDENTIFIER}.workers.dev/studio
+
+Username: admin
+Password: password
+
+NOTE: You can change your Outerbase Studio password in the wrangler.toml file and redeploy.
+
+==========================================
 </code>
 </pre>
 
 <br />
-<h2>🛠️ Executing Queries</h2>
+<h2>Executing Queries</h2>
 <p>Start executing queries against your database with the following cURL commands:</p>
 
 <h3>Create Table</h3>
@@ -184,19 +215,15 @@ window.onload = connectWebSocket;
 ```
 
 <br />
-<h2>🤝 Contributing</h2>
+<h2>Contributing</h2>
 <p>We welcome contributions! Please refer to our <a href="./CONTRIBUTING.md">Contribution Guide</a> for more details.</p>
 
 <br />
-<h2>🔧 Why Are We Building This?</h2>
-<p>We want to give back to the community and make it simple to deploy your own scale-to-zero SQLite database. With the serverless architecture of durable objects, you can now have your application layer coexist on the same compute instance as your database.</p>
-
-<br />
-<h2>📄 License</h2>
+<h2>License</h2>
 <p>This project is licensed under the MIT license. See the <a href="./LICENSE.txt">LICENSE</a> file for more info.</p>
 
 <br />
-<h2>👥 Contributors</h2>
+<h2>Contributors</h2>
 <p>
   <img align="left" src="https://contributors-img.web.app/image?repo=brayden/starbasedb" alt="Contributors"/>
 </p>
