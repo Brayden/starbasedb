@@ -1,9 +1,10 @@
-import { createResponse } from './utils';
+import { createResponse, Query } from './utils';
 
 export type OperationQueueItem = {
-    queries: { sql: string; params?: any[] }[];
+    queries: Query[];
     isTransaction: boolean;
     isRaw: boolean;
+    allowQueryDedupe: boolean;
     resolve: (value: any) => void;
     reject: (reason?: any) => void;
 }
@@ -71,7 +72,7 @@ export async function executeTransaction(queries: { sql: string; params?: any[] 
 }
 
 export async function enqueueOperation(
-    queries: { sql: string; params?: any[] }[],
+    queries: Query[],
     isTransaction: boolean,
     isRaw: boolean,
     operationQueue: any[],
@@ -148,5 +149,29 @@ export async function processNextOperation(
     } finally {
         processingOperation.value = false;
         await processNextOperation(sqlInstance, operationQueue, ctx, processingOperation);
+    }
+}
+
+function isSimilarQuery(query1: { sql: string; params?: any[] }, query2: { sql: string; params?: any[] }) {
+    return query1.sql === query2.sql && query1.params === query2.params;
+}
+
+function isSimilarOperation(operation1: OperationQueueItem, operation2: OperationQueueItem) {
+    return operation1.queries.every((query, index) => isSimilarQuery(query, operation2.queries[index]));
+}
+
+function findSimilarOperation(operationQueue: OperationQueueItem[], operation: OperationQueueItem) {
+    return operationQueue.find((item) => isSimilarOperation(item, operation));
+}
+
+function removeSimilarOperations(operationQueue: OperationQueueItem[], operation: OperationQueueItem) {
+    return operationQueue.filter((item) => !isSimilarOperation(item, operation));
+}
+
+export function resolveSimilarOperations(operationQueue: OperationQueueItem[], operation: OperationQueueItem) {
+    const similarOperation = findSimilarOperation(operationQueue, operation);
+
+    if (similarOperation) {
+        similarOperation.resolve(operation.result);
     }
 }

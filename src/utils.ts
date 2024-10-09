@@ -1,10 +1,15 @@
-export type QueryTransactionRequest = {
-    transaction?: QueryRequest[];
+export type QueryTransaction = {
+    transaction?: Query[];
 }
 
-export type QueryRequest = {
+export type Query = {
+    // The SQL query to execute
     sql: string;
+    // The parameters to pass to the query
     params?: any[];
+    // Whether to allow query deduplication. If a query with the same SQL and parameters is already in the queue, 
+    //the result of the existing query will be returned instead of enqueuing a new operation.
+    allowQueryDedupe?: boolean;
 };
 
 export type ServerResponse = {

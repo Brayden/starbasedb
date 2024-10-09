@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { createResponse, createResponseFromOperationResponse, QueryRequest, QueryTransactionRequest } from './utils';
+import { createResponse, createResponseFromOperationResponse, Query, QueryTransaction } from './utils';
 import { enqueueOperation, OperationQueueItem, processNextOperation } from './operation';
 import handleStudioRequest from "./studio";
 
@@ -37,7 +37,7 @@ export class DatabaseDurableObject extends DurableObject {
                 return createResponse(undefined, 'Content-Type must be application/json.', 400);
             }
     
-            const { sql, params, transaction } = await request.json() as QueryRequest & QueryTransactionRequest;
+            const { sql, params, transaction, allowQueryDedupe } = await request.json() as Query & QueryTransaction;
     
             if (Array.isArray(transaction) && transaction.length) {
                 const queries = transaction.map((queryObj: any) => {
@@ -140,6 +140,13 @@ export class DatabaseDurableObject extends DurableObject {
             );
 
             ws.send(JSON.stringify(response.result));
+
+            // Anyone else in the queue that had a similar query we can immediately return the same result
+            // for (const operation of this.operationQueue) {
+            //     if (operation.queries.every((query, index) => query.sql === sql && query.params === params)) {
+            //         operation.resolve(response.result);
+            //     }
+            // }
         }
     }
 
