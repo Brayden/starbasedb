@@ -4,7 +4,7 @@ export type OperationQueueItem = {
     queries: { sql: string; params?: any[] }[];
     isTransaction: boolean;
     isRaw: boolean;
-    resolve: (value: Response) => void;
+    resolve: (value: any) => void;
     reject: (reason?: any) => void;
 }
 
@@ -24,7 +24,7 @@ export function executeQuery(sql: string, params: any[] | undefined, isRaw: bool
         let cursor;
         
         if (params && params.length) {
-            cursor = sqlInstance.exec(sql, params);
+            cursor = sqlInstance.exec(sql, ...params);
         } else {
             cursor = sqlInstance.exec(sql);
         }
@@ -52,36 +52,22 @@ export function executeQuery(sql: string, params: any[] | undefined, isRaw: bool
 }
 
 export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, sqlInstance: any, ctx: any): Promise<any[]> {
-    const results = [];
-    let transactionBookmark: any | null = null;
+    return ctx.storage.transactionSync(() => {
+        const results = [];
 
-    try {
-        // Create a storage bookmark before starting the transaction.
-        transactionBookmark = await ctx.storage.getCurrentBookmark();
+        try {
+            for (const queryObj of queries) {
+                const { sql, params } = queryObj;
+                const result = executeQuery(sql, params, isRaw, sqlInstance);
+                results.push(result);
+            }
 
-        for (const queryObj of queries) {
-            const { sql, params } = queryObj;
-            const result = executeQuery(sql, params, isRaw, sqlInstance);
-            results.push(result);
+            return results;
+        } catch (error) {
+            console.error('Transaction Execution Error:', error);
+            throw error;
         }
-
-        transactionBookmark = null;
-        return results;
-    } catch (error) {
-        console.error('Transaction Execution Error:', error);
-
-        /**
-         * If an error occurs during the transaction, we can restore the storage to the state
-         * before the transaction began by using the bookmark we created before starting the
-         * transaction.
-         */
-        if (transactionBookmark) {
-            await ctx.storage.onNextSessionRestoreBookmark(transactionBookmark);
-            await ctx.abort();
-        }
-
-        throw error;
-    }
+    });
 }
 
 export async function enqueueOperation(
@@ -90,7 +76,7 @@ export async function enqueueOperation(
     isRaw: boolean,
     operationQueue: any[],
     processNextOperation: () => Promise<void>
-): Promise<Response> {
+): Promise<{ result?: any, error?: string | undefined, status: number }> {
     const MAX_WAIT_TIME = 25000;
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -101,13 +87,23 @@ export async function enqueueOperation(
             queries,
             isTransaction,
             isRaw,
-            resolve: (value: Response) => {
+            resolve: (value: any) => {
                 clearTimeout(timeout);
-                resolve(value);
+
+                resolve({
+                    result: value,
+                    error: undefined,
+                    status: 200
+                })
             },
             reject: (reason?: any) => {
                 clearTimeout(timeout);
-                reject(reason);
+
+                reject({
+                    result: undefined,
+                    error: reason ?? 'Operation failed.',
+                    status: 500
+                })
             }
         });
 
@@ -146,10 +142,9 @@ export async function processNextOperation(
             result = executeQuery(sql, params, isRaw, sqlInstance);
         }
 
-        resolve(createResponse(result, undefined, 200));
+        resolve(result);
     } catch (error: any) {
-        console.error('Operation Execution Error:', error);
-        reject(createResponse(undefined, error.message || 'Operation failed.', 500));
+        reject(error.message || 'Operation failed.');
     } finally {
         processingOperation.value = false;
         await processNextOperation(sqlInstance, operationQueue, ctx, processingOperation);
