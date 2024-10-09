@@ -72,7 +72,15 @@ export class DatabaseDurableObject extends DurableObject {
             }
 
             try {
-                const queries = [{ sql, params }];
+                const queries = [{ sql, params, allowQueryDedupe }];
+                // ADD FOR TESTING TO FORCE POPULATE THE OPERATION QUEUE WITH DUPES
+                // enqueueOperation(
+                //     queries,
+                //     false,
+                //     isRaw,
+                //     this.operationQueue,
+                //     () => { return Promise.resolve() }
+                // );
                 const response = await enqueueOperation(
                     queries,
                     false,

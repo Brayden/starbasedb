@@ -4,7 +4,6 @@ export type OperationQueueItem = {
     queries: Query[];
     isTransaction: boolean;
     isRaw: boolean;
-    allowQueryDedupe: boolean;
     resolve: (value: any) => void;
     reject: (reason?: any) => void;
 }
@@ -131,7 +130,9 @@ export async function processNextOperation(
     }
 
     processingOperation.value = true;
-    const { queries, isTransaction, isRaw, resolve, reject } = operationQueue.shift()!;
+
+    const operation = operationQueue.shift()!;
+    const { queries, isTransaction, isRaw, resolve, reject } = operation;
 
     try {
         let result;
@@ -147,12 +148,13 @@ export async function processNextOperation(
     } catch (error: any) {
         reject(error.message || 'Operation failed.');
     } finally {
+        resolveSimilarOperations(operationQueue, operation);
         processingOperation.value = false;
         await processNextOperation(sqlInstance, operationQueue, ctx, processingOperation);
     }
 }
 
-function isSimilarQuery(query1: { sql: string; params?: any[] }, query2: { sql: string; params?: any[] }) {
+function isSimilarQuery(query1: Query, query2: Query) {
     return query1.sql === query2.sql && query1.params === query2.params;
 }
 
@@ -160,18 +162,19 @@ function isSimilarOperation(operation1: OperationQueueItem, operation2: Operatio
     return operation1.queries.every((query, index) => isSimilarQuery(query, operation2.queries[index]));
 }
 
-function findSimilarOperation(operationQueue: OperationQueueItem[], operation: OperationQueueItem) {
-    return operationQueue.find((item) => isSimilarOperation(item, operation));
-}
-
-function removeSimilarOperations(operationQueue: OperationQueueItem[], operation: OperationQueueItem) {
-    return operationQueue.filter((item) => !isSimilarOperation(item, operation));
-}
-
 export function resolveSimilarOperations(operationQueue: OperationQueueItem[], operation: OperationQueueItem) {
-    const similarOperation = findSimilarOperation(operationQueue, operation);
+    console.log('resolveSimilarOperations', operationQueue, operation);
 
-    if (similarOperation) {
-        similarOperation.resolve(operation.result);
+    for (const item of operationQueue) {
+        // For now, only support single query transactions.
+        if (item.queries.length === 1) {
+            const query = item.queries[0]
+
+            // If the single query can be deduped, verify similar operations to resolve
+            if (isSimilarOperation(item, operation) && query.allowQueryDedupe) {
+                item.resolve(operation.resolve);
+                operationQueue = operationQueue.filter((item) => !isSimilarOperation(item, operation));
+            }
+        }
     }
 }
