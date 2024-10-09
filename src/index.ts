@@ -1,8 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
-import { createResponse, QueryRequest, QueryTransactionRequest } from './utils';
+import { createResponse, createResponseFromOperationResponse, QueryRequest, QueryTransactionRequest } from './utils';
 import { enqueueOperation, OperationQueueItem, processNextOperation } from './operation';
-import { LiteREST } from './literest';
-
+import { LiteREST } from './literest'; // Import LiteREST
+import handleStudioRequest from "./studio";
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
@@ -15,6 +15,11 @@ export class DatabaseDurableObject extends DurableObject {
 
     // Flag to indicate if an operation is currently being processed
     private processingOperation: { value: boolean } = { value: false };
+
+    // Map of WebSocket connections to their corresponding session IDs
+    private connections = new Map<string, WebSocket>();
+
+    // Instantiate LiteREST
     private liteREST: LiteREST;
 
 	/**
@@ -27,8 +32,14 @@ export class DatabaseDurableObject extends DurableObject {
     constructor(ctx: DurableObjectState, env: Env) {
         super(ctx, env);
         this.sql = ctx.storage.sql;
-                // Initialize LiteREST for handling /lite routes
-        this.liteREST = new LiteREST(ctx);
+
+        // Initialize LiteREST for handling /lite routes
+        this.liteREST = new LiteREST(
+            ctx,
+            this.operationQueue,
+            this.processingOperation,
+            this.sql
+        );
     }
 
     async queryRoute(request: Request, isRaw: boolean): Promise<Response> {
@@ -53,32 +64,42 @@ export class DatabaseDurableObject extends DurableObject {
                     return { sql, params };
                 });
 
-                const response = await enqueueOperation(
-                    queries,
-                    true,
-                    isRaw,
-                    this.operationQueue,
-                    () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
-                );
-                return response;
+                try {
+                    const response = await enqueueOperation(
+                        queries,
+                        true,
+                        isRaw,
+                        this.operationQueue,
+                        () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+                    );
+
+                    return createResponseFromOperationResponse(response);
+                } catch (error: any) {
+                    return createResponse(undefined, error.error || 'An unexpected error occurred.', error.status || 500);
+                }
             } else if (typeof sql !== 'string' || !sql.trim()) {
                 return createResponse(undefined, 'Invalid or empty "sql" field.', 400);
             } else if (params !== undefined && !Array.isArray(params)) {
                 return createResponse(undefined, 'Invalid "params" field.', 400);
             }
-    
-            const queries = [{ sql, params }];
-            const response = await enqueueOperation(
-                queries,
-                false,
-                isRaw,
-                this.operationQueue,
-                () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
-            );
-            return response;
+
+            try {
+                const queries = [{ sql, params }];
+                const response = await enqueueOperation(
+                    queries,
+                    false,
+                    isRaw,
+                    this.operationQueue,
+                    () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+                );
+                
+                return createResponseFromOperationResponse(response);
+            } catch (error: any) {
+                return createResponse(undefined, error.error || 'An unexpected error occurred.', error.status || 500);
+            }
         } catch (error: any) {
             console.error('Query Route Error:', error);
-            return createResponse(undefined, 'An unexpected error occurred.', 500);
+            return createResponse(undefined, error || 'An unexpected error occurred.', 500);
         }
     }
 
@@ -97,14 +118,56 @@ export class DatabaseDurableObject extends DurableObject {
             return this.queryRoute(request, true);
         } else if (request.method === 'POST' && url.pathname === '/query') {
             return this.queryRoute(request, false);
+        } else if (url.pathname === '/socket') {
+            return this.clientConnected();
         } else if (request.method === 'GET' && url.pathname === '/status') {
             return this.statusRoute(request);
         } else if (url.pathname.startsWith('/lite')) {
             // Route /lite requests to LiteREST for handling
             const liteRequest = new Request(request.url.replace('/lite', ''), request);
-            return this.liteREST.handleRequest(liteRequest);
+            return await this.liteREST.handleRequest(liteRequest);
         } else {
             return createResponse(undefined, 'Unknown operation', 400);
+        }
+    }
+
+    clientConnected() {
+        const webSocketPair = new WebSocketPair();
+        const [client, server] = Object.values(webSocketPair);
+        const wsSessionId = crypto.randomUUID();
+
+        this.ctx.acceptWebSocket(server, [wsSessionId]);
+        this.connections.set(wsSessionId, client);
+
+        return new Response(null, { status: 101, webSocket: client });
+    }
+
+    async webSocketMessage(ws: WebSocket, message: any) {
+        const { sql, params, action } = JSON.parse(message);
+    
+        if (action === 'query') {
+            const queries = [{ sql, params }];
+            const response = await enqueueOperation(
+                queries,
+                false,
+                false,
+                this.operationQueue,
+                () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+            );
+
+            ws.send(JSON.stringify(response.result));
+        }
+    }
+
+    async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean) {
+        // If the client closes the connection, the runtime will invoke the webSocketClose() handler.
+        ws.close(code, "StarbaseDB is closing WebSocket connection");
+
+        // Remove the WebSocket connection from the map
+        const tags = this.ctx.getTags(ws);
+        if (tags.length) {
+            const wsSessionId = tags[0];
+            this.connections.delete(wsSessionId);
         }
     }
 }
@@ -119,13 +182,40 @@ export default {
 	 * @returns The response to be sent back to the client
 	 */
 	async fetch(request, env, ctx): Promise<Response> {
+        const isWebSocket = request.headers.get("Upgrade") === "websocket";
+
+        /**
+         * If the request is a GET request to the /studio endpoint, we can handle the request
+         * directly in the Worker to avoid the need to deploy a separate Worker for the Studio.
+         * Studio provides a user interface to interact with the SQLite database in the Durable
+         * Object.
+         */
+        if (env.STUDIO_USER && env.STUDIO_PASS && request.method === 'GET' && new URL(request.url).pathname === '/studio') {
+            return handleStudioRequest(request, {
+                username: env.STUDIO_USER,
+                password: env.STUDIO_PASS, 
+                apiToken: env.AUTHORIZATION_TOKEN
+            });
+        }
+
         /**
          * Prior to proceeding to the Durable Object, we can perform any necessary validation or
          * authorization checks here to ensure the request signature is valid and authorized to
          * interact with the Durable Object.
          */
-        if (request.headers.get('Authorization') !== `Bearer ${env.AUTHORIZATION_TOKEN}`) {
+        if (request.headers.get('Authorization') !== `Bearer ${env.AUTHORIZATION_TOKEN}` && !isWebSocket) {
             return createResponse(undefined, 'Unauthorized request', 401)
+        } else if (isWebSocket) {
+            /**
+             * Web socket connections cannot pass in an Authorization header into their requests,
+             * so we can use a query parameter to validate the connection.
+             */
+            const url = new URL(request.url);
+            const token = url.searchParams.get('token');
+
+            if (token !== env.AUTHORIZATION_TOKEN) {
+                return new Response('WebSocket connections are not supported at this endpoint.', { status: 440 });
+            }
         }
 
         /**

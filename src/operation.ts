@@ -118,40 +118,49 @@ export async function enqueueOperation(
 }
 
 export async function processNextOperation(
-    sqlInstance: any,
-    operationQueue: OperationQueueItem[],
-    ctx: any,
+    sql: any,
+    operationQueue: Array<OperationQueueItem>,
+    state: DurableObjectState,
     processingOperation: { value: boolean }
 ) {
-    if (processingOperation.value) {
-        // Already processing an operation
-        return;
-    }
-
-    if (operationQueue.length === 0) {
-        // No operations remaining to process
+    if (processingOperation.value || operationQueue.length === 0) {
         return;
     }
 
     processingOperation.value = true;
-    const { queries, isTransaction, isRaw, resolve, reject } = operationQueue.shift()!;
 
+    const operation = operationQueue[0];
     try {
-        let result;
-
-        if (isTransaction) {
-            result = await executeTransaction(queries, isRaw, sqlInstance, ctx);
-        } else {
-            const { sql, params } = queries[0];
-            result = executeQuery(sql, params, isRaw, sqlInstance);
+        if (operation.isTransaction) {
+            sql.exec('BEGIN;');
         }
 
-        resolve(createResponse(result, undefined, 200));
-    } catch (error: any) {
-        console.error('Operation Execution Error:', error);
-        reject(createResponse(undefined, error.message || 'Operation failed.', 500));
+        for (const query of operation.queries) {
+            const params = query.params ? query.params.flat() : [];
+            console.log('Executing SQL Query:', query.sql, 'with params:', params);
+            if (params.length > 0) {
+                sql.exec(query.sql, ...params);
+            } else {
+                sql.exec(query.sql);
+            }
+        }
+
+        if (operation.isTransaction) {
+            sql.exec('COMMIT;');
+        }
+
+        operation.resolve(new Response('Operation successful'));
+    } catch (error) {
+        console.error('SQL Execution Error:', error);
+        if (operation.isTransaction) {
+            sql.exec('ROLLBACK;');
+        }
+        operation.reject(error);
     } finally {
+        operationQueue.shift();
         processingOperation.value = false;
-        await processNextOperation(sqlInstance, operationQueue, ctx, processingOperation);
+        if (operationQueue.length > 0) {
+            processNextOperation(sql, operationQueue, state, processingOperation);
+        }
     }
 }
