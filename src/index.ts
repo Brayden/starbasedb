@@ -40,9 +40,6 @@ export class DatabaseDurableObject extends DurableObject {
             this.processingOperation,
             this.sql
         );
-        // this.liteREST = new LiteREST(
-        //     this
-        // );
     }
 
     async queryRoute(request: Request, isRaw: boolean): Promise<Response> {

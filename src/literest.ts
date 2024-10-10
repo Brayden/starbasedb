@@ -120,6 +120,11 @@ export class LiteREST {
         );
     }
 
+    /**
+     * Handles the incoming request and determines the appropriate action based on the method and path.
+     * @param request - The incoming request.
+     * @returns The response to the request.
+     */
     async handleRequest(request: Request): Promise<Response> {
         const { method, tableName, id, searchParams, body } = await this.parseRequest(request);
 
@@ -144,6 +149,11 @@ export class LiteREST {
         }
     }
 
+    /**
+     * Parses the incoming request and extracts the method, table name, id, search parameters, and body.
+     * @param request - The incoming request.
+     * @returns An object containing the method, table name, id, search parameters, and body.
+     */
     private async parseRequest(request: Request): Promise<{ method: string, tableName: string, id?: string, searchParams: URLSearchParams, body?: any }> {
         const liteRequest = new Request(request.url.replace('/lite', ''), request);
         const url = new URL(liteRequest.url);
@@ -244,107 +254,12 @@ export class LiteREST {
         try {
             const response = await this.executeOperation([{ sql: query, params }]);
             const resultArray = response.result;
-            console.log('GET SQL Result:', resultArray);
             return createResponse(resultArray, undefined, 200);
         } catch (error: any) {
             console.error('GET Operation Error:', error);
             return createResponse(undefined, error.message || 'Failed to retrieve data', 500);
         }
-    }
-
-    // private async handleGet(tableName: string, id: string | undefined, searchParams: URLSearchParams): Promise<Response> {
-    //     let query = `SELECT * FROM ${tableName}`;
-    //     const params: any[] = [];
-    //     const conditions: string[] = [];
-    //     const pkColumns = this.getPrimaryKeyColumns(tableName);
-    //     const { conditions: pkConditions, params: pkParams, error } = this.getPrimaryKeyConditions(pkColumns, id, {}, searchParams);
-    
-    //     if (error && id) {
-    //         return createResponse(undefined, error, 400);
-    //     } else if (!error) {
-    //         conditions.push(...pkConditions);
-    //         params.push(...pkParams);
-    //     }
-    
-    //     // Extract special parameters and remove them from searchParams
-    //     const sortBy = searchParams.get('sort_by');
-    //     if (sortBy) {
-    //         searchParams.delete('sort_by');
-    //     }
-    
-    //     const orderParam = searchParams.get('order');
-    //     let order = 'ASC';
-    //     if (orderParam) {
-    //         order = orderParam.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-    //         searchParams.delete('order');
-    //     }
-    
-    //     const limitParam = searchParams.get('limit');
-    //     let limit = 0;
-    //     if (limitParam) {
-    //         limit = parseInt(limitParam, 10);
-    //         searchParams.delete('limit');
-    //     }
-    
-    //     const offsetParam = searchParams.get('offset');
-    //     let offset = 0;
-    //     if (offsetParam) {
-    //         offset = parseInt(offsetParam, 10);
-    //         searchParams.delete('offset');
-    //     }
-    
-    //     // Handle other search parameters
-    //     for (const [key, value] of searchParams.entries()) {
-    //         if (pkColumns.includes(key)) continue; // Skip primary key columns
-    //         const [column, op] = key.split('.');
-    //         const sanitizedColumn = this.sanitizeIdentifier(column);
-    //         const operator = this.sanitizeOperator(op);
-    
-    //         if (operator === 'IN') {
-    //             const values = value.split(',').map(val => val.trim());
-    //             const placeholders = values.map(() => '?').join(', ');
-    //             conditions.push(`${sanitizedColumn} IN (${placeholders})`);
-    //             params.push(...values);
-    //         } else {
-    //             conditions.push(`${sanitizedColumn} ${operator} ?`);
-    //             params.push(value);
-    //         }
-    //     }
-    
-    //     if (conditions.length > 0) {
-    //         query += ` WHERE ${conditions.join(' AND ')}`;
-    //     }
-    
-    //     // Sorting
-    //     if (sortBy) {
-    //         const sanitizedSortBy = this.sanitizeIdentifier(sortBy);
-    //         query += ` ORDER BY ${sanitizedSortBy} ${order}`;
-    //     }
-    
-    //     // Pagination
-    //     if (limit > 0) {
-    //         query += ` LIMIT ?`;
-    //         params.push(limit);
-    //         if (offset > 0) {
-    //             query += ` OFFSET ?`;
-    //             params.push(offset);
-    //         }
-    //     }
-    
-    //     console.log('Executing GET SQL Query:', query, 'with params:', params);
-    
-    //     try {
-    //         const response = await this.executeOperation([{ sql: query, params }]);
-    //         const resultArray = response.result;
-    //         // const cursor = this.sql.exec(query, ...params);
-    //         // const resultArray = cursor.toArray();
-    //         console.log('GET SQL Result:', resultArray);
-    //         return createResponse(resultArray, undefined, 200);
-    //     } catch (error: any) {
-    //         console.error('GET Operation Error:', error);
-    //         return createResponse(undefined, error.message || 'Failed to retrieve data', 500);
-    //     }
-    // }    
+    } 
 
     private async handlePost(tableName: string, data: any): Promise<Response> {
         if (!this.isDataValid(data)) {
@@ -387,7 +302,6 @@ export class LiteREST {
             return createResponse(undefined, errorMessage, 500);
         }
     }
-
 
     private async handlePatch(tableName: string, id: string | undefined, data: any): Promise<Response> {
         const pkColumns = this.getPrimaryKeyColumns(tableName);
