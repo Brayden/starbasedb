@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { createResponse, createResponseFromOperationResponse, QueryRequest, QueryTransactionRequest } from './utils';
 import { enqueueOperation, OperationQueueItem, processNextOperation } from './operation';
+import { LiteREST } from './literest';
 import handleStudioRequest from "./studio";
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
@@ -18,6 +19,9 @@ export class DatabaseDurableObject extends DurableObject {
     // Map of WebSocket connections to their corresponding session IDs
     private connections = new Map<string, WebSocket>();
 
+    // Instantiate LiteREST
+    private liteREST: LiteREST;
+
 	/**
 	 * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
 	 * 	`DurableObjectStub::get` for a given identifier (no-op constructors can be omitted)
@@ -28,6 +32,14 @@ export class DatabaseDurableObject extends DurableObject {
     constructor(ctx: DurableObjectState, env: Env) {
         super(ctx, env);
         this.sql = ctx.storage.sql;
+        
+        // Initialize LiteREST for handling /lite routes
+        this.liteREST = new LiteREST(
+            ctx,
+            this.operationQueue,
+            this.processingOperation,
+            this.sql
+        );
     }
 
     async queryRoute(request: Request, isRaw: boolean): Promise<Response> {
@@ -110,6 +122,8 @@ export class DatabaseDurableObject extends DurableObject {
             return this.clientConnected();
         } else if (request.method === 'GET' && url.pathname === '/status') {
             return this.statusRoute(request);
+        } else if (url.pathname.startsWith('/lite')) {
+            return await this.liteREST.handleRequest(request);
         } else {
             return createResponse(undefined, 'Unknown operation', 400);
         }
