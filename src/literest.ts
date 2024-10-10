@@ -12,7 +12,7 @@ export class LiteREST {
         state: DurableObjectState,
         operationQueue: Array<OperationQueueItem>,
         processingOperation: { value: boolean },
-        sql: any
+        sql: SqlStorage
     ) {
         this.state = state;
         this.sql = sql;
@@ -249,7 +249,6 @@ export class LiteREST {
 
     private async handleGet(tableName: string, id: string | undefined, searchParams: URLSearchParams): Promise<Response> {
         const { query, params } = this.buildSelectQuery(tableName, id, searchParams);
-        console.log('Executing GET SQL Query:', query, 'with params:', params);
 
         try {
             const response = await this.executeOperation([{ sql: query, params }]);
@@ -280,9 +279,6 @@ export class LiteREST {
 
         // Map parameters using original data keys to get correct values
         const params = dataKeys.map(key => data[key]);
-
-        console.log('Enqueueing POST SQL Query:', query, 'with params:', params);
-
         const queries = [{ sql: query, params }];
 
         try {
@@ -294,7 +290,6 @@ export class LiteREST {
                 () => processNextOperation(this.sql, this.operationQueue, this.state, this.processingOperation)
             );
     
-            console.log('POST Operation Success - Inserted Data:', data);
             return createResponse({ message: 'Resource created successfully', data }, undefined, 201);
         } catch (error: any) {
             console.error('POST Operation Error:', error);
@@ -341,8 +336,6 @@ export class LiteREST {
         const params = updateKeys.map(key => data[key]);
         params.push(...pkParams);
 
-        console.log('Enqueueing PATCH SQL Query:', query, 'with params:', params);
-
         const queries = [{ sql: query, params }];
 
         try {
@@ -354,9 +347,8 @@ export class LiteREST {
                 () => processNextOperation(this.sql, this.operationQueue, this.state, this.processingOperation)
             );
 
-            console.log('PATCH Operation Success - Updated Data:', data);
             return createResponse({ message: 'Resource updated successfully', data }, undefined, 200);
-        } catch (error) {
+        } catch (error: any) {
             console.error('PATCH Operation Error:', error);
             return createResponse(undefined, error.message || 'Failed to update resource', 500);
         }
@@ -392,12 +384,10 @@ export class LiteREST {
         const params = dataKeys.map(key => data[key]);
         params.push(...pkParams);
 
-        console.log('Enqueueing PUT SQL Query:', query, 'with params:', params);
-
         const queries = [{ sql: query, params }];
 
         try {
-            const response = await enqueueOperation(
+            await enqueueOperation(
                 queries,
                 false,
                 false,
@@ -405,12 +395,8 @@ export class LiteREST {
                 () => processNextOperation(this.sql, this.operationQueue, this.state, this.processingOperation)
             );
 
-            // Check if any rows were affected
-            // You might need to adjust how you check for affected rows based on your implementation
-
-            console.log('PUT Operation Success - Replaced Data:', data);
             return createResponse({ message: 'Resource replaced successfully', data }, undefined, 200);
-        } catch (error) {
+        } catch (error: any) {
             console.error('PUT Operation Error:', error);
             return createResponse(undefined, error.message || 'Failed to replace resource', 500);
         }
@@ -427,9 +413,6 @@ export class LiteREST {
         }
 
         const query = `DELETE FROM ${tableName} WHERE ${pkConditions.join(' AND ')}`;
-
-        console.log('Enqueueing DELETE SQL Query:', query, 'with params:', pkParams);
-
         const queries = [{ sql: query, params: pkParams }];
 
         try {
@@ -440,9 +423,9 @@ export class LiteREST {
                 this.operationQueue,
                 () => processNextOperation(this.sql, this.operationQueue, this.state, this.processingOperation)
             );
-            console.log('DELETE Operation Success');
+            
             return createResponse({ message: 'Resource deleted successfully' }, undefined, 200);
-        } catch (error) {
+        } catch (error: any) {
             console.error('DELETE Operation Error:', error);
             return createResponse(undefined, error.message || 'Failed to delete resource', 500);
         }
