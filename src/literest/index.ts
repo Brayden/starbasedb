@@ -1,6 +1,6 @@
 import { DurableObjectState } from "@cloudflare/workers-types";
-import { createResponse } from './utils';
-import { enqueueOperation, OperationQueueItem, processNextOperation } from './operation';
+import { createResponse } from '../utils';
+import { enqueueOperation, OperationQueueItem, processNextOperation } from '../operation';
 
 export class LiteREST {
     private sql: SqlStorage;
