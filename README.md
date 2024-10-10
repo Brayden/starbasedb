@@ -11,10 +11,10 @@
 
 <div align="center">
   <a href="https://github.com/Brayden/starbasedb/releases"><img src="https://img.shields.io/github/v/release/Brayden/starbasedb?display_name=tag&style=flat"></img></a>
-  <a href="https://twitter.com/BraydenWilmoth"><img src="https://img.shields.io/static/v1?label=Website&message=StarbaseDB&color=%23be185d&style=flat"></img></a>
-  <a href="https://twitter.com/BraydenWilmoth"><img src="https://img.shields.io/static/v1?label=Follow&message=@BraydenWilmoth&color=blue&style=flat"></img></a>
-  <a href="https://discord.gg/k2J7jcJCvd"><img src="https://img.shields.io/static/v1?label=Join us on&message=Discord&color=blue&style=flat"></img></a>
-  <a href="https://outerbase.com"><img src="https://img.shields.io/static/v1?label=Check out&message=Outerbase&color=black&style=flat"></img></a>
+  <a href="https://starbasedb.com"><img src="https://img.shields.io/static/v1?label=Website&message=StarbaseDB&color=%23be185d&style=flat"></img></a>
+  <a href="https://twitter.com/BraydenWilmoth"><img src="https://img.shields.io/static/v1?label=Follow&message=@BraydenWilmoth&color=black&style=flat"></img></a>
+  <a href="https://discord.gg/k2J7jcJCvd"><img src="https://img.shields.io/static/v1?label=Join us on&message=Discord&color=%237289da&style=flat"></img></a>
+  <a href="https://outerbase.com"><img src="https://img.shields.io/static/v1?label=Check out&message=Outerbase&color=gray&style=flat"></img></a>
 </div>
 
 <br />
