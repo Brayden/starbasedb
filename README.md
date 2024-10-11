@@ -24,7 +24,8 @@
   <li><strong><a href="https://github.com/Brayden/starbasedb?tab=readme-ov-file#web-sockets">Web Socket Connections</a></strong> to query your database with low-latency web sockets</li>
   <li><strong><a href="https://github.com/Brayden/starbasedb?tab=readme-ov-file#transactions">Transactions Support</a></strong> for executing interdependent collections of queries</li>
   <li><strong><a href="https://github.com/Brayden/starbasedb/blob/main/src/literest/README.md">REST API Support</a></strong> automatically included for interacting with your tables</li>
-  <li><strong><a href="https://github.com/Brayden/starbasedb/edit/main/README.md#deploy-a-starbasedb">Database Interface</a></strong> included out of the box deployed with your Cloudflare Worker</li>
+  <li><strong><a href="https://github.com/Brayden/starbasedb?tab=readme-ov-file#sql-dump">Database Interface</a></strong> included out of the box deployed with your Cloudflare Worker</li>
+  <li><strong><a href="https://github.com/Brayden/starbasedb/edit/main/README.md#deploy-a-starbasedb">SQL Export Dump</a></strong> to extract your schema and data into a local file</li>
   <li><strong>Scale-to-zero Compute</strong> to reduce costs when your database is not in use</li>
 </ul>
 <br />
@@ -214,6 +215,17 @@ function sendMessage() {
 
 window.onload = connectWebSocket;
 ```
+
+<h3>SQL Dump</h3>
+You can request a `database_dump.sql` file that exports your database schema and data into a single file.
+
+<pre>
+<code>
+curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/dump' \
+--header 'Authorization: Bearer ABC123' 
+--output database_dump.sql
+</code>
+</pre>
 
 <br />
 <h2>Contributing</h2>

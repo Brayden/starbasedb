@@ -171,7 +171,6 @@ export class DatabaseDurableObject extends DurableObject {
         }
     }
 
-    // Add this new method
     async dumpDatabaseRoute(_: Request): Promise<Response> {
         try {
             // Get all table names
@@ -182,11 +181,8 @@ export class DatabaseDurableObject extends DurableObject {
                 this.operationQueue,
                 () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
             );
-            // const tablesResult = await this.sql.exec("SELECT name FROM sqlite_master WHERE type='table';");
-            // console.log('tablesResult', tablesResult);
+            
             const tables = tablesResult.result.map((row: any) => row.name);
-            console.log('tables', tables);
-
             let dumpContent = "SQLite format 3\0";  // SQLite file header
 
             // Iterate through all tables
@@ -199,8 +195,6 @@ export class DatabaseDurableObject extends DurableObject {
                     this.operationQueue,
                     () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
                 );
-                // const schemaResult = await this.sql.exec(`SELECT sql FROM sqlite_master WHERE type='table' AND name='${table}';`);
-                console.log('schemaResult', schemaResult);
 
                 if (schemaResult.result.length) {
                     const schema = schemaResult.result[0].sql;
@@ -215,8 +209,7 @@ export class DatabaseDurableObject extends DurableObject {
                     this.operationQueue,
                     () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
                 );
-                // const dataResult = await this.sql.query(`SELECT * FROM ${table};`);
-                console.log('dataResult', dataResult);
+
                 for (const row of dataResult.result) {
                     const values = Object.values(row).map(value => 
                         typeof value === 'string' ? `'${value.replace(/'/g, "''")}'` : value
@@ -232,8 +225,15 @@ export class DatabaseDurableObject extends DurableObject {
 
             const headers = new Headers({
                 'Content-Type': 'application/x-sqlite3',
-                'Content-Disposition': 'attachment; filename="database_dump.sql"'
+                'Content-Disposition': 'attachment; filename="database_dump.sql"',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization'
             });
+
+            if (_.method === 'OPTIONS') {
+                return new Response(null, { headers });
+            }
 
             return new Response(blob, { headers });
         } catch (error: any) {
