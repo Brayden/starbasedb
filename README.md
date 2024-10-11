@@ -38,6 +38,7 @@
   <li><strong>Data Streaming</strong> for streaming responses back as rows are read</li>
   <li><strong>Data Syncing</strong> between local source and your database</li>
   <li><strong>Export Data</strong> as a CSV, JSON or SQLite file</li>
+  <li><strong>Import Data</strong> from a CSV, JSON or SQLite file</li>
 </ul>
 
 <br />
