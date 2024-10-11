@@ -155,7 +155,7 @@ export class LiteREST {
      * @returns An object containing the method, table name, id, search parameters, and body.
      */
     private async parseRequest(request: Request): Promise<{ method: string, tableName: string, id?: string, searchParams: URLSearchParams, body?: any }> {
-        const liteRequest = new Request(request.url.replace('/lite', ''), request);
+        const liteRequest = new Request(request.url.replace('/rest', ''), request);
         const url = new URL(liteRequest.url);
         const pathParts = url.pathname.split('/').filter(Boolean);
 
