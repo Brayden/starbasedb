@@ -124,6 +124,8 @@ export class DatabaseDurableObject extends DurableObject {
             return this.statusRoute(request);
         } else if (url.pathname.startsWith('/lite')) {
             return await this.liteREST.handleRequest(request);
+        } else if (request.method === 'GET' && url.pathname === '/dump') {
+            return this.dumpDatabaseRoute(request);
         } else {
             return createResponse(undefined, 'Unknown operation', 400);
         }
@@ -166,6 +168,77 @@ export class DatabaseDurableObject extends DurableObject {
         if (tags.length) {
             const wsSessionId = tags[0];
             this.connections.delete(wsSessionId);
+        }
+    }
+
+    // Add this new method
+    async dumpDatabaseRoute(_: Request): Promise<Response> {
+        try {
+            // Get all table names
+            const tablesResult = await enqueueOperation(
+                [{ sql: "SELECT name FROM sqlite_master WHERE type='table';" }],
+                false,
+                false,
+                this.operationQueue,
+                () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+            );
+            // const tablesResult = await this.sql.exec("SELECT name FROM sqlite_master WHERE type='table';");
+            // console.log('tablesResult', tablesResult);
+            const tables = tablesResult.result.map((row: any) => row.name);
+            console.log('tables', tables);
+
+            let dumpContent = "SQLite format 3\0";  // SQLite file header
+
+            // Iterate through all tables
+            for (const table of tables) {
+                // Get table schema
+                const schemaResult = await enqueueOperation(
+                    [{ sql: `SELECT sql FROM sqlite_master WHERE type='table' AND name='${table}';` }],
+                    false,
+                    false,
+                    this.operationQueue,
+                    () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+                );
+                // const schemaResult = await this.sql.exec(`SELECT sql FROM sqlite_master WHERE type='table' AND name='${table}';`);
+                console.log('schemaResult', schemaResult);
+
+                if (schemaResult.result.length) {
+                    const schema = schemaResult.result[0].sql;
+                    dumpContent += `\n-- Table: ${table}\n${schema};\n\n`;
+                }
+
+                // Get table data
+                const dataResult = await enqueueOperation(
+                    [{ sql: `SELECT * FROM ${table};` }],
+                    false,
+                    false,
+                    this.operationQueue,
+                    () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+                );
+                // const dataResult = await this.sql.query(`SELECT * FROM ${table};`);
+                console.log('dataResult', dataResult);
+                for (const row of dataResult.result) {
+                    const values = Object.values(row).map(value => 
+                        typeof value === 'string' ? `'${value.replace(/'/g, "''")}'` : value
+                    );
+                    dumpContent += `INSERT INTO ${table} VALUES (${values.join(', ')});\n`;
+                }
+
+                dumpContent += '\n';
+            }
+
+            // Create a Blob from the dump content
+            const blob = new Blob([dumpContent], { type: 'application/x-sqlite3' });
+
+            const headers = new Headers({
+                'Content-Type': 'application/x-sqlite3',
+                'Content-Disposition': 'attachment; filename="database_dump.sql"'
+            });
+
+            return new Response(blob, { headers });
+        } catch (error: any) {
+            console.error('Database Dump Error:', error);
+            return createResponse(undefined, 'Failed to create database dump', 500);
         }
     }
 }
