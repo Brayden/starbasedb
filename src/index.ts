@@ -226,14 +226,7 @@ export class DatabaseDurableObject extends DurableObject {
             const headers = new Headers({
                 'Content-Type': 'application/x-sqlite3',
                 'Content-Disposition': 'attachment; filename="database_dump.sql"',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, Authorization'
             });
-
-            if (_.method === 'OPTIONS') {
-                return new Response(null, { headers });
-            }
 
             return new Response(blob, { headers });
         } catch (error: any) {
