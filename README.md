@@ -234,7 +234,7 @@ curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/dump' \
 
 <br />
 <h2>License</h2>
-<p>This project is licensed under the MIT license. See the <a href="./LICENSE.txt">LICENSE</a> file for more info.</p>
+<p>This project is licensed under the MIT license. See the <a href="./LICENSE">LICENSE</a> file for more info.</p>
 
 <br />
 <h2>Contributors</h2>
