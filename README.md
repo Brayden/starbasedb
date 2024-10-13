@@ -222,7 +222,7 @@ You can request a `database_dump.sql` file that exports your database schema and
 
 <pre>
 <code>
-curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/dump' \
+curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/dump' \
 --header 'Authorization: Bearer ABC123' 
 --output database_dump.sql
 </code>

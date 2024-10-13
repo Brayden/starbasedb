@@ -127,7 +127,7 @@ export class DatabaseDurableObject extends DurableObject {
             return this.statusRoute(request);
         } else if (url.pathname.startsWith('/rest')) {
             return await this.liteREST.handleRequest(request);
-        } else if (request.method === 'GET' && url.pathname === '/dump') {
+        } else if (request.method === 'GET' && url.pathname === '/export/dump') {
             return dumpDatabaseRoute(this.sql, this.operationQueue, this.ctx, this.processingOperation);
         } else if (request.method === 'GET' && url.pathname.startsWith('/export/json/')) {
             const tableName = url.pathname.split('/').pop();
