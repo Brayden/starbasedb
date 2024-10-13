@@ -4,6 +4,8 @@ import { enqueueOperation, OperationQueueItem, processNextOperation } from './op
 import { LiteREST } from './literest';
 import handleStudioRequest from "./studio";
 import { dumpDatabaseRoute } from './export/dump';
+import { exportTableToJsonRoute } from './export/json';
+import { exportTableToCsvRoute } from './export/csv';
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
@@ -127,6 +129,18 @@ export class DatabaseDurableObject extends DurableObject {
             return await this.liteREST.handleRequest(request);
         } else if (request.method === 'GET' && url.pathname === '/dump') {
             return dumpDatabaseRoute(this.sql, this.operationQueue, this.ctx, this.processingOperation);
+        } else if (request.method === 'GET' && url.pathname.startsWith('/export/json/')) {
+            const tableName = url.pathname.split('/').pop();
+            if (!tableName) {
+                return createResponse(undefined, 'Table name is required', 400);
+            }
+            return exportTableToJsonRoute(this.sql, this.operationQueue, this.ctx, this.processingOperation, tableName);
+        } else if (request.method === 'GET' && url.pathname.startsWith('/export/csv/')) {
+            const tableName = url.pathname.split('/').pop();
+            if (!tableName) {
+                return createResponse(undefined, 'Table name is required', 400);
+            }
+            return exportTableToCsvRoute(this.sql, this.operationQueue, this.ctx, this.processingOperation, tableName);
         } else {
             return createResponse(undefined, 'Unknown operation', 400);
         }

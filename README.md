@@ -228,6 +228,26 @@ curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/dump' \
 </code>
 </pre>
 
+<h3>JSON Data Export</h3>
+<pre>
+<code>
+curl
+--location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/json/users' \
+--header 'Authorization: Bearer ABC123'
+--output output.json
+</code>
+</pre>
+
+<h3>CSV Data Export</h3>
+<pre>
+<code>
+curl
+--location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/csv/users' \
+--header 'Authorization: Bearer ABC123'
+--output output.csv
+</code>
+</pre>
+
 <br />
 <h2>Contributing</h2>
 <p>We welcome contributions! Please refer to our <a href="./CONTRIBUTING.md">Contribution Guide</a> for more details.</p>
