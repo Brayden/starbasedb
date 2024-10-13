@@ -222,9 +222,29 @@ You can request a `database_dump.sql` file that exports your database schema and
 
 <pre>
 <code>
-curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/dump' \
+curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/dump' \
 --header 'Authorization: Bearer ABC123' 
 --output database_dump.sql
+</code>
+</pre>
+
+<h3>JSON Data Export</h3>
+<pre>
+<code>
+curl
+--location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/json/users' \
+--header 'Authorization: Bearer ABC123'
+--output output.json
+</code>
+</pre>
+
+<h3>CSV Data Export</h3>
+<pre>
+<code>
+curl
+--location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/csv/users' \
+--header 'Authorization: Bearer ABC123'
+--output output.csv
 </code>
 </pre>
 
