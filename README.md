@@ -26,6 +26,7 @@
   <li><strong><a href="https://github.com/Brayden/starbasedb/blob/main/src/literest/README.md">REST API Support</a></strong> automatically included for interacting with your tables</li>
   <li><strong><a href="https://github.com/Brayden/starbasedb/edit/main/README.md#deploy-a-starbasedb">Database Interface</a></strong> included out of the box deployed with your Cloudflare Worker</li>
   <li><strong><a href="https://github.com/Brayden/starbasedb?tab=readme-ov-file#sql-dump">Export SQL Dump</a></strong> to extract your schema and data into a local `.sql` file</li>
+  <li><strong><a href="https://github.com/Brayden/starbasedb?tab=readme-ov-file#sql-import">Import SQL Dump</a></strong> to import your schema and data from a local `.sql` file</li>
   <li><strong>Scale-to-zero Compute</strong> to reduce costs when your database is not in use</li>
 </ul>
 <br />
@@ -247,6 +248,17 @@ curl
 --output output.csv
 </code>
 </pre>
+
+<h3>SQL Import</h3>
+<pre>
+<code>
+curl 
+--location 'https://starbasedb.YOUR-ID-HERE.workers.dev/import/dump' \
+--header 'Authorization: Bearer ABC123' \
+--form 'sqlFile=@"./Desktop/sqldump.sql"'
+</code>
+</pre>
+
 
 <br />
 <h2>Contributing</h2>
