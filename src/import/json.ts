@@ -11,6 +11,7 @@ interface JsonData {
 }
 
 export async function importTableFromJsonRoute(
+    sql: SqlStorage,
     operationQueue: any,
     ctx: any,
     processingOperation: { value: boolean },
@@ -58,11 +59,11 @@ export async function importTableFromJsonRoute(
             const values = Object.values(mappedRecord);
             const placeholders = values.map(() => '?').join(', ');
 
-            const sql = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
+            const statement = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
 
             try {
                 await enqueueOperation(
-                    [{ sql, params: values }],
+                    [{ sql: statement, params: values }],
                     false,
                     false,
                     operationQueue,
@@ -71,8 +72,8 @@ export async function importTableFromJsonRoute(
                 successCount++;
             } catch (error: any) {
                 failedStatements.push({
-                    statement: sql,
-                    error: error.message || 'Unknown error'
+                    statement: statement,
+                    error: error || 'Unknown error'
                 });
             }
         }

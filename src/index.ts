@@ -150,7 +150,7 @@ export class DatabaseDurableObject extends DurableObject {
             if (!tableName) {
                 return createResponse(undefined, 'Table name is required', 400);
             }
-            return importTableFromJsonRoute(this.operationQueue, this.ctx, this.processingOperation, tableName, request);
+            return importTableFromJsonRoute(this.sql, this.operationQueue, this.ctx, this.processingOperation, tableName, request);
         } else {
             return createResponse(undefined, 'Unknown operation', 400);
         }
