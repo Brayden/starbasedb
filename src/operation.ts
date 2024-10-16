@@ -1,7 +1,7 @@
-import { createResponse } from './utils';
+import { createResponse, Query } from './utils';
 
 export type OperationQueueItem = {
-    queries: { sql: string; params?: any[] }[];
+    queries: Query[];
     isTransaction: boolean;
     isRaw: boolean;
     resolve: (value: any) => void;
@@ -71,7 +71,7 @@ export async function executeTransaction(queries: { sql: string; params?: any[] 
 }
 
 export async function enqueueOperation(
-    queries: { sql: string; params?: any[] }[],
+    queries: Query[],
     isTransaction: boolean,
     isRaw: boolean,
     operationQueue: any[],
@@ -130,7 +130,9 @@ export async function processNextOperation(
     }
 
     processingOperation.value = true;
-    const { queries, isTransaction, isRaw, resolve, reject } = operationQueue.shift()!;
+
+    const operation = operationQueue.shift()!;
+    const { queries, isTransaction, isRaw, resolve, reject } = operation;
 
     try {
         let result;
@@ -146,7 +148,33 @@ export async function processNextOperation(
     } catch (error: any) {
         reject(error.message || 'Operation failed.');
     } finally {
+        resolveSimilarOperations(operationQueue, operation);
         processingOperation.value = false;
         await processNextOperation(sqlInstance, operationQueue, ctx, processingOperation);
+    }
+}
+
+function isSimilarQuery(query1: Query, query2: Query) {
+    return query1.sql === query2.sql && query1.params === query2.params;
+}
+
+function isSimilarOperation(operation1: OperationQueueItem, operation2: OperationQueueItem) {
+    return operation1.queries.every((query, index) => isSimilarQuery(query, operation2.queries[index]));
+}
+
+export function resolveSimilarOperations(operationQueue: OperationQueueItem[], operation: OperationQueueItem) {
+    console.log('resolveSimilarOperations', operationQueue, operation);
+
+    for (const item of operationQueue) {
+        // For now, only support single query transactions.
+        if (item.queries.length === 1) {
+            const query = item.queries[0]
+
+            // If the single query can be deduped, verify similar operations to resolve
+            if (isSimilarOperation(item, operation) && query.allowQueryDedupe) {
+                item.resolve(operation.resolve);
+                operationQueue = operationQueue.filter((item) => !isSimilarOperation(item, operation));
+            }
+        }
     }
 }
