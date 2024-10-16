@@ -8,6 +8,7 @@ import { exportTableToJsonRoute } from './export/json';
 import { exportTableToCsvRoute } from './export/csv';
 import { importDumpRoute } from './import/dump';
 import { importTableFromJsonRoute } from './import/json';
+import { importTableFromCsvRoute } from './import/csv';
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
@@ -151,6 +152,12 @@ export class DatabaseDurableObject extends DurableObject {
                 return createResponse(undefined, 'Table name is required', 400);
             }
             return importTableFromJsonRoute(this.sql, this.operationQueue, this.ctx, this.processingOperation, tableName, request);
+        } else if (request.method === 'POST' && url.pathname.startsWith('/import/csv/')) {
+            const tableName = url.pathname.split('/').pop();
+            if (!tableName) {
+                return createResponse(undefined, 'Table name is required', 400);
+            }
+            return importTableFromCsvRoute(this.sql, this.operationQueue, this.ctx, this.processingOperation, tableName, request);
         } else {
             return createResponse(undefined, 'Unknown operation', 400);
         }
