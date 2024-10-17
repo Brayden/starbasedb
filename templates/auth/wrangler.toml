@@ -1,0 +1,22 @@
+name = "starbasedb_auth"
+main = "./src/index.ts"
+compatibility_date = "2024-09-25"
+
+# Bind a Durable Object. Durable objects are a scale-to-zero compute primitive based on the actor model.
+# Durable Objects can live for as long as needed. Use these when you need a long-running "server", such as in realtime apps.
+# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#durable-objects
+#[[durable_objects.bindings]]
+#name = "DATABASE_DURABLE_OBJECT"
+#class_name = "DatabaseDurableObject"
+
+# Durable Object migrations.
+# Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#migrations
+#[[migrations]]
+#tag = "v1"
+#new_sqlite_classes = ["DatabaseDurableObject"] # Array of new classes
+
+[durable_objects]
+bindings = [{ name = "DATABASE_DURABLE_OBJECT", class_name = "DatabaseDurableObject", script_name = "starbasedb" }]
+
+[vars]
+REQUIRE_EMAIL_CONFIRM = 1

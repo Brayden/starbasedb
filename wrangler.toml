@@ -4,6 +4,12 @@ main = "src/index.ts"
 compatibility_date = "2024-09-25"
 account_id = ""
 
+# Service Bindings
+[[services]]
+binding = "AUTH"
+service = "starbasedb_auth"
+entrypoint = "AuthEntrypoint"
+
 # Workers Logs
 # Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
 # Configuration: https://developers.cloudflare.com/workers/observability/logs/workers-logs/#enable-workers-logs
@@ -28,5 +34,5 @@ AUTHORIZATION_TOKEN = "ABC123"
 
 # Uncomment the section below to create a user for logging into your database UI.
 # You can access the Studio UI at: https://your_endpoint/studio
-# STUDIO_USER = "admin"
-# STUDIO_PASS = "123456"
+STUDIO_USER = "admin"
+STUDIO_PASS = "123456"
