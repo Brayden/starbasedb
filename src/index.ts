@@ -67,7 +67,7 @@ export class DatabaseDurableObject extends DurableObject {
      * @param params - Optional parameters for the SQL query.
      * @returns A response containing the query result or an error message.
      */
-    async executeExternalQuery(sql: string, params: any[] | undefined) {
+    async executeExternalQuery(sql: string, params: any[] | undefined): Promise<any> {
         try {
             const queries = [{ sql, params }];
             const response = await enqueueOperation(
@@ -78,9 +78,10 @@ export class DatabaseDurableObject extends DurableObject {
                 () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
             );
 
-            return createResponseFromOperationResponse(response);
+            return response;
         } catch (error: any) {
-            return createResponse(undefined, error.error || 'An unexpected error occurred.', error.status || 500);
+            console.error('Execute External Query Error:', error);
+            return null;
         }
     }
 
@@ -293,14 +294,9 @@ export default {
          * that is responsible for handling authentication.
          */
         if (pathname.startsWith('/auth')) {
-            // return new Response(`Auth ENV ${JSON.stringify(env)}`, {status: 200}); 
-            // const body = await request.json();
-            // console.log("Auth Request: ", body);
-            console.log("Auth Request: ", request);
-            return await env.AUTH.handleAuth(pathname, request.method, {});
+            const body = await request.json();
+            return await env.AUTH.handleAuth(pathname, request.method, body);
         }
-
-        console.log('SHOULD NOT SEE THIS');
 
         /**
          * Pass the fetch request directly to the Durable Object, which will handle the request
