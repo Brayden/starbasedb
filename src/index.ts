@@ -12,6 +12,16 @@ import { importTableFromCsvRoute } from './import/csv';
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
+interface Env {
+    AUTHORIZATION_TOKEN: string;
+    DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
+    STUDIO_USER?: string;
+    STUDIO_PASS?: string;
+    AUTH: {
+        handleAuth(pathname: string, verb: string, body: any): Promise<Response>;
+    }
+}
+
 export class DatabaseDurableObject extends DurableObject {
     // Durable storage for the SQL database
     public sql: SqlStorage;
@@ -38,7 +48,7 @@ export class DatabaseDurableObject extends DurableObject {
     constructor(ctx: DurableObjectState, env: Env) {
         super(ctx, env);
         this.sql = ctx.storage.sql;
-        
+
         // Initialize LiteREST for handling /lite routes
         this.liteREST = new LiteREST(
             ctx,
@@ -46,6 +56,34 @@ export class DatabaseDurableObject extends DurableObject {
             this.processingOperation,
             this.sql
         );
+    }
+
+    /**
+     * Execute a raw SQL query on the database, typically used for external requests
+     * from other service bindings (e.g. auth). This serves as an exposed function for
+     * other service bindings to query the database without having to have knowledge of
+     * the current operation queue or processing state.
+     * 
+     * @param sql - The SQL query to execute.
+     * @param params - Optional parameters for the SQL query.
+     * @returns A response containing the query result or an error message.
+     */
+    async executeExternalQuery(sql: string, params: any[] | undefined): Promise<any> {
+        try {
+            const queries = [{ sql, params }];
+            const response = await enqueueOperation(
+                queries,
+                false,
+                false,
+                this.operationQueue,
+                () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+            );
+
+            return response;
+        } catch (error: any) {
+            console.error('Execute External Query Error:', error);
+            return null;
+        }
     }
 
     async queryRoute(request: Request, isRaw: boolean): Promise<Response> {
@@ -214,6 +252,7 @@ export default {
 	 * @returns The response to be sent back to the client
 	 */
 	async fetch(request, env, ctx): Promise<Response> {
+        const pathname = new URL(request.url).pathname;
         const isWebSocket = request.headers.get("Upgrade") === "websocket";
 
         /**
@@ -222,7 +261,7 @@ export default {
          * Studio provides a user interface to interact with the SQLite database in the Durable
          * Object.
          */
-        if (env.STUDIO_USER && env.STUDIO_PASS && request.method === 'GET' && new URL(request.url).pathname === '/studio') {
+        if (env.STUDIO_USER && env.STUDIO_PASS && request.method === 'GET' && pathname === '/studio') {
             return handleStudioRequest(request, {
                 username: env.STUDIO_USER,
                 password: env.STUDIO_PASS, 
@@ -256,6 +295,15 @@ export default {
          */
         let id: DurableObjectId = env.DATABASE_DURABLE_OBJECT.idFromName(DURABLE_OBJECT_ID);
 		let stub = env.DATABASE_DURABLE_OBJECT.get(id);
+
+        /**
+         * If the pathname starts with /auth, we want to pass the request off to another Worker
+         * that is responsible for handling authentication.
+         */
+        if (pathname.startsWith('/auth')) {
+            const body = await request.json();
+            return await env.AUTH.handleAuth(pathname, request.method, body);
+        }
 
         /**
          * Pass the fetch request directly to the Durable Object, which will handle the request
