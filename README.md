@@ -11,6 +11,7 @@
 
 <div align="center">
   <a href="https://github.com/Brayden/starbasedb/releases"><img src="https://img.shields.io/github/v/release/Brayden/starbasedb?display_name=tag&style=flat"></img></a>
+  <a href="https://starbasedb.hashnode.space/default-guide/introduction/quick-start"><img src="https://img.shields.io/static/v1?label=Read&message=Documentation&color=purple&style=flat"></img></a>
   <a href="https://starbasedb.com"><img src="https://img.shields.io/static/v1?label=Website&message=StarbaseDB&color=%23be185d&style=flat"></img></a>
   <a href="https://twitter.com/BraydenWilmoth"><img src="https://img.shields.io/static/v1?label=Follow&message=@BraydenWilmoth&color=black&style=flat"></img></a>
   <a href="https://discord.gg/k2J7jcJCvd"><img src="https://img.shields.io/static/v1?label=Join us on&message=Discord&color=%237289da&style=flat"></img></a>
@@ -20,13 +21,12 @@
 <br />
 <h2>Features</h2>
 <ul>
-  <li><strong><a href="https://github.com/Brayden/starbasedb/edit/main/README.md#executing-queries">HTTPS Endpoints</a></strong> to query & interact with your database</li>
-  <li><strong><a href="https://github.com/Brayden/starbasedb?tab=readme-ov-file#web-sockets">Web Socket Connections</a></strong> to query your database with low-latency web sockets</li>
-  <li><strong><a href="https://github.com/Brayden/starbasedb?tab=readme-ov-file#transactions">Transactions Support</a></strong> for executing interdependent collections of queries</li>
-  <li><strong><a href="https://github.com/Brayden/starbasedb/blob/main/src/literest/README.md">REST API Support</a></strong> automatically included for interacting with your tables</li>
+  <li><strong><a href="https://starbasedb.hashnode.space/default-guide/http-endpoints/query">HTTPS Endpoints</a></strong> to query & interact with your database</li>
+  <li><strong><a href="https://starbasedb.hashnode.space/default-guide/web-sockets/introduction">Web Socket Connections</a></strong> to query your database with low-latency web sockets</li>
+  <li><strong><a href="https://starbasedb.hashnode.space/default-guide/http-endpoints/transactions">Transactions Support</a></strong> for executing interdependent collections of queries</li>
+  <li><strong><a href="https://starbasedb.hashnode.space/default-guide/rest-api/introduction">REST API Support</a></strong> automatically included for interacting with your tables</li>
   <li><strong><a href="https://github.com/Brayden/starbasedb/edit/main/README.md#deploy-a-starbasedb">Database Interface</a></strong> included out of the box deployed with your Cloudflare Worker</li>
-  <li><strong><a href="https://github.com/Brayden/starbasedb?tab=readme-ov-file#sql-dump">Export SQL Dump</a></strong> to extract your schema and data into a local `.sql` file</li>
-  <li><strong><a href="https://github.com/Brayden/starbasedb?tab=readme-ov-file#sql-import">Import SQL Dump</a></strong> to import your schema and data from a local `.sql` file</li>
+  <li><strong><a href="https://starbasedb.hashnode.space/default-guide/import-export/sql-dump">Import & Export Data</a></strong> to import & extract your schema and data into a local `.sql`, `.json` or `.csv` file</li>
   <li><strong>Scale-to-zero Compute</strong> to reduce costs when your database is not in use</li>
 </ul>
 <br />
@@ -39,8 +39,8 @@
   <li><strong>Data Replication</strong> to scale reads beyond the 1,000 RPS limitation</li>
   <li><strong>Data Streaming</strong> for streaming responses back as rows are read</li>
   <li><strong>Data Syncing</strong> between local source and your database</li>
-  <li><strong>Export Data</strong> as a CSV, JSON or SQLite file</li>
-  <li><strong>Import Data</strong> from a CSV, JSON or SQLite file</li>
+  <li><strong>Service Templates</strong> for out of the box features such as user authentication, analytics and more</li>
+  <li><strong>Scheduled CRON Tasks</strong> to execute code at desired intervals</li>
 </ul>
 
 <br />
