@@ -74,10 +74,6 @@ export default class AuthEntrypoint extends WorkerEntrypoint {
         return new Response(`${request.json()}`, {status: 200});
     }
 
-    async handleLogin(request: Request) {
-        return new Response(`${request.json()}`, {status: 200});
-    }
-
     async handleLogout(request: Request) {
         return new Response(`${request.json()}`, {status: 200});
     }
