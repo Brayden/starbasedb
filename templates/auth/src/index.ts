@@ -1,6 +1,6 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { createResponse, encryptPassword, verifyPassword } from "./utils";
-import { login, signup } from "./email";
+import { login as emailLogin, signup as emailSignup } from "./email";
+import { createResponse } from "./utils";
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
@@ -10,7 +10,10 @@ export default class AuthEntrypoint extends WorkerEntrypoint {
     // Currently, entrypoints without a named handler are not supported
     async fetch() { return new Response(null, {status: 404}); }
 
-    // TEMPORARY: Setup auth tables via a shell script instead of in here.
+    /**
+     * Sets up the auth tables if they don't exist
+     * @returns 
+     */
     async setupAuthTables() {
         const createUserTableQuery = `
             CREATE TABLE IF NOT EXISTS auth_users (
@@ -41,6 +44,13 @@ export default class AuthEntrypoint extends WorkerEntrypoint {
         return response;
     }
 
+    /**
+     * Handles the auth requests, forwards to the appropriate handler
+     * @param pathname 
+     * @param verb 
+     * @param body 
+     * @returns 
+     */
     async handleAuth(pathname: string, verb: string, body: any) {
         console.log('Handling Auth in Service Binding: ', body)
 
@@ -50,31 +60,24 @@ export default class AuthEntrypoint extends WorkerEntrypoint {
         await this.setupAuthTables();
 
         if (verb === "POST" && pathname === "/auth/signup") {
-            return signup(this.stub, this.env, body);
+            return emailSignup(this.stub, this.env, body);
         } else if (verb === "POST" && pathname === "/auth/login") {
-            return login(this.stub, body);
+            return emailLogin(this.stub, body);
         }
 
         return new Response(null, {status: 405});
     }
 
-    async handleVerifyEmail(request: Request) {
-        return new Response(`${request.json()}`, {status: 200});
-    }
-
-    async handleResendEmail(request: Request) {
-        return new Response(`${request.json()}`, {status: 200});
-    }
-
-    async handleForgotPassword(request: Request) {
-        return new Response(`${request.json()}`, {status: 200});
-    }
-
-    async handleResetPassword(request: Request) {
-        return new Response(`${request.json()}`, {status: 200});
-    }
-
-    async handleLogout(request: Request) {
-        return new Response(`${request.json()}`, {status: 200});
+    /**
+     * Handles logging out a user by invalidating all sessions for the user
+     * @param request 
+     * @param body 
+     * @returns 
+     */
+    async handleLogout(request: Request, body: any) {
+        await this.stub.executeExternalQuery(`UPDATE auth_sessions SET deleted_at = CURRENT_TIMESTAMP WHERE user_id = ?`, [body.user_id]);
+        return createResponse(JSON.stringify({
+            success: true,
+        }), undefined, 200);
     }
 }

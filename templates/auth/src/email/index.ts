@@ -8,10 +8,10 @@ export async function signup(stub: any, env: any, body: any) {
     const isValidPassword = verifyPassword(env, body.password);
     if (!isValidPassword) {
         const errorMessage = `Password must be at least ${env.PASSWORD_REQUIRE_LENGTH} characters, ` +
-            `contain at least one uppercase letter, ` +
-            `one lowercase letter, ` +
-            `one number, and ` +
-            `one special character`;
+            `${env.PASSWORD_REQUIRE_UPPERCASE ? "contain at least one uppercase letter, " : ""}` +
+            `${env.PASSWORD_REQUIRE_LOWERCASE ? "contain at least one lowercase letter, " : ""}` +
+            `${env.PASSWORD_REQUIRE_NUMBER ? "contain at least one number, " : ""}` +
+            `${env.PASSWORD_REQUIRE_SPECIAL ? "contain at least one special character, " : ""}`;
         return createResponse(undefined, errorMessage, 400);
     }
 
@@ -29,6 +29,7 @@ export async function signup(stub: any, env: any, body: any) {
        RETURNING id, username, email`,
       [body.username, encryptedPassword, body.email]
     );
+
     if (createUserResponse.result.length === 0) {
         return createResponse(undefined, "Failed to create user", 500);
     }
@@ -41,6 +42,7 @@ export async function signup(stub: any, env: any, body: any) {
        RETURNING user_id, session_token, created_at`,
       [createUserResponse.result[0].id, sessionToken]
     );
+
     if (createSessionResponse.result.length === 0) {
         return createResponse(undefined, "Failed to create session", 500);
     }
