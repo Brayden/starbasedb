@@ -98,8 +98,6 @@ export function executeQuery(sql: string, params: any[] | undefined, isRaw: bool
                     }
                 });
             }
-
-            console.log('Columns map: ', columnsMap);
         }
     });
 
@@ -147,11 +145,6 @@ export function executeQuery(sql: string, params: any[] | undefined, isRaw: bool
 }
 
 function maskRow(row: any, columns: any[] | undefined, columnsToMask: Record<string, any>[], columnsMap: Record<string, any>[]) {
-    console.log('Columns to mask: ', columnsToMask);
-    console.log('Columns map: ', columnsMap);
-    console.log('Row: ', row);
-    console.log('Columns: ', columns);
-
     const defaultSchemaName = 'main';
 
     if (columns) {
