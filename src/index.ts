@@ -8,6 +8,7 @@ import { exportTableToJsonRoute } from './export/json';
 import { exportTableToCsvRoute } from './export/csv';
 import { importDumpRoute } from './import/dump';
 import { importTableFromJsonRoute } from './import/json';
+import { handleApiRequest } from "./api";
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
@@ -16,6 +17,7 @@ interface Env {
     DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
     STUDIO_USER?: string;
     STUDIO_PASS?: string;
+    // ## DO NOT REMOVE: INSERT TEMPLATE INTERFACE ##
     AUTH: {
         handleAuth(pathname: string, verb: string, body: any): Promise<Response>;
     }
@@ -189,6 +191,8 @@ export class DatabaseDurableObject extends DurableObject {
                 return createResponse(undefined, 'Table name is required', 400);
             }
             return importTableFromJsonRoute(this.sql, this.operationQueue, this.ctx, this.processingOperation, tableName, request);
+        } else if (url.pathname.startsWith('/api')) {
+            return await handleApiRequest(request);
         } else {
             return createResponse(undefined, 'Unknown operation', 400);
         }
@@ -288,6 +292,8 @@ export default {
          */
         let id: DurableObjectId = env.DATABASE_DURABLE_OBJECT.idFromName(DURABLE_OBJECT_ID);
 		let stub = env.DATABASE_DURABLE_OBJECT.get(id);
+
+        // ## DO NOT REMOVE: INSERT TEMPLATE ROUTING LOGIC ##
 
         /**
          * If the pathname starts with /auth, we want to pass the request off to another Worker

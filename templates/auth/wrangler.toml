@@ -5,11 +5,6 @@ compatibility_date = "2024-09-25"
 [durable_objects]
 bindings = [{ name = "DATABASE_DURABLE_OBJECT", class_name = "DatabaseDurableObject", script_name = "starbasedb" }]
 
-# Allows for us to send user management emails such as email confirmation.
-send_email = [
-    {name = "<NAME_FOR_BINDING1>"}
-]
-
 [vars]
 REQUIRE_EMAIL_CONFIRM = 1
 PASSWORD_REQUIRE_LENGTH = 13
