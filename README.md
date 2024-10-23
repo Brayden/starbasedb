@@ -27,6 +27,7 @@
   <li><strong><a href="https://starbasedb.hashnode.space/default-guide/rest-api/introduction">REST API Support</a></strong> automatically included for interacting with your tables</li>
   <li><strong><a href="https://github.com/Brayden/starbasedb/edit/main/README.md#deploy-a-starbasedb">Database Interface</a></strong> included out of the box deployed with your Cloudflare Worker</li>
   <li><strong><a href="https://starbasedb.hashnode.space/default-guide/import-export/sql-dump">Import & Export Data</a></strong> to import & extract your schema and data into a local `.sql`, `.json` or `.csv` file</li>
+  <li><strong><a href="https://github.com/Brayden/starbasedb/pull/26">Bindable Microservices</a></strong> via templates to kickstart development and own the logic (e.g. user authentication)</li>
   <li><strong>Scale-to-zero Compute</strong> to reduce costs when your database is not in use</li>
 </ul>
 <br />
@@ -39,7 +40,6 @@
   <li><strong>Data Replication</strong> to scale reads beyond the 1,000 RPS limitation</li>
   <li><strong>Data Streaming</strong> for streaming responses back as rows are read</li>
   <li><strong>Data Syncing</strong> between local source and your database</li>
-  <li><strong>Service Templates</strong> for out of the box features such as user authentication, analytics and more</li>
   <li><strong>Scheduled CRON Tasks</strong> to execute code at desired intervals</li>
 </ul>
 
