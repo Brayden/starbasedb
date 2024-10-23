@@ -266,7 +266,7 @@ curl
 
 <br />
 <h2>License</h2>
-<p>This project is licensed under the MIT license. See the <a href="./LICENSE">LICENSE</a> file for more info.</p>
+<p>This project is licensed under the AGPL-3.0 license. See the <a href="./LICENSE">LICENSE</a> file for more info.</p>
 
 <br />
 <h2>Contributors</h2>
