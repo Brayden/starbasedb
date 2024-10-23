@@ -17,10 +17,7 @@ interface Env {
     DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
     STUDIO_USER?: string;
     STUDIO_PASS?: string;
-    // ## DO NOT REMOVE: INSERT TEMPLATE INTERFACE ##
-    AUTH: {
-        handleAuth(pathname: string, verb: string, body: any): Promise<Response>;
-    }
+    // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
 }
 
 export class DatabaseDurableObject extends DurableObject {
@@ -293,16 +290,7 @@ export default {
         let id: DurableObjectId = env.DATABASE_DURABLE_OBJECT.idFromName(DURABLE_OBJECT_ID);
 		let stub = env.DATABASE_DURABLE_OBJECT.get(id);
 
-        // ## DO NOT REMOVE: INSERT TEMPLATE ROUTING LOGIC ##
-
-        /**
-         * If the pathname starts with /auth, we want to pass the request off to another Worker
-         * that is responsible for handling authentication.
-         */
-        if (pathname.startsWith('/auth')) {
-            const body = await request.json();
-            return await env.AUTH.handleAuth(pathname, request.method, body);
-        }
+        // ## DO NOT REMOVE: TEMPLATE ROUTING ##
 
         /**
          * Pass the fetch request directly to the Durable Object, which will handle the request
