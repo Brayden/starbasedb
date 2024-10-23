@@ -4,7 +4,11 @@ import { createResponse } from "./utils";
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
-export default class AuthEntrypoint extends WorkerEntrypoint {
+interface Env {
+    DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
+}
+
+export default class AuthEntrypoint extends WorkerEntrypoint<Env> {
     private stub: any;
 
     // Currently, entrypoints without a named handler are not supported
@@ -43,5 +47,20 @@ export default class AuthEntrypoint extends WorkerEntrypoint {
         return createResponse(JSON.stringify({
             success: true,
         }), undefined, 200);
+    }
+
+    /**
+     * Checks if a session is valid by checking if the session token exists and is not deleted
+     * @param sessionToken 
+     * @returns 
+     */
+    async isSessionValid(sessionToken: string) {
+        let result = await this.stub.executeExternalQuery(
+            `SELECT * FROM auth_sessions 
+             WHERE session_token = ? 
+             AND deleted_at IS NULL`, 
+            [sessionToken]
+        );
+        return result.result.length > 0;
     }
 }
