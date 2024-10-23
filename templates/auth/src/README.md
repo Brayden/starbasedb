@@ -94,7 +94,7 @@ the updates so that all of the new authentication application logic can exist an
 be accessible.
 ```
 cd ../..
-npm run deploy
+npm run cf-typegen && npm run deploy
 ```
 
 **NOTE:** You will want to deploy your new service worker for authentication before deploying updates to your StarbaseDB instance, because the StarbaseDB instance will rely on the authentication worker being available (see the service bindings we added in the wrangler.toml file for reference).
