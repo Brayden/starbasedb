@@ -31,12 +31,10 @@ export async function signup(stub: any, env: any, body: any) {
         [body.username, encryptedPassword, body.email]
         );
 
-        console.log('Flag 6')
         if (createUserResponse?.result?.length === 0) {
             return createResponse(undefined, "Failed to create user", 500);
         }
 
-        console.log('Flag 7')
         // Create a session for the user
         const sessionToken = crypto.randomUUID();
         let createSessionResponse = await stub.executeExternalQuery(
