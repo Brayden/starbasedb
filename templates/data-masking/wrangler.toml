@@ -1,0 +1,9 @@
+name = "starbasedb_data_masking"
+main = "./src/index.ts"
+compatibility_date = "2024-09-25"
+
+[observability]
+enabled = true
+
+[durable_objects]
+bindings = [{ name = "DATABASE_DURABLE_OBJECT", class_name = "DatabaseDurableObject", script_name = "starbasedb" }]
