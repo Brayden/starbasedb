@@ -31,7 +31,7 @@ ON data_masking_rules(schema_name, table_name, column_name);
 This will let your StarbaseDB instance know that we are deploying another Worker
 and it should use that for our authentication application routing logic.
 
-```
+```yaml
 [[services]]
 binding = "DATA_MASKING"
 service = "starbasedb_data_masking"
@@ -55,7 +55,7 @@ database here so we do not recursively call our `maskQueryResult` operation. The
 object because of this restriction, since inside a bindable service we only have access to `executeExternalQuery` which would also
 trigger the recursive calls.
 
-```
+```javascript
 async function afterQuery(sql: string, result: any, isRaw: boolean, sqlInstance: any, env?: Env): Promise<any> {
     // ## DO NOT REMOVE: TEMPLATE AFTER QUERY HOOK ##
     const maskingRulesCursor = sqlInstance.exec('SELECT * FROM data_masking_rules')
@@ -67,7 +67,7 @@ async function afterQuery(sql: string, result: any, isRaw: boolean, sqlInstance:
 
 ### Deploy template project to Cloudflare
 Next, we will deploy our new dynamic data masking logic to a new Cloudflare Worker instance.
-```
+```bash
 cd ./templates/data-maski gn
 npm i && npm run deploy
 ```
@@ -76,9 +76,17 @@ npm i && npm run deploy
 With all of the changes we have made to our StarbaseDB instance we can now deploy
 the updates so that all of the new dynamic data masking application logic can exist and
 be accessible.
-```
+```bash
 cd ../..
 npm run cf-typegen && npm run deploy
 ```
+
+### Insert a masking rule into your database table
+Open up your database UI and inside your `data_masking_rules` table add a new entry. Enter in the schema (e.g. "main", "public", etc), name of the table, column name to target, and masking mode. Masking mode can be either "null", "redact", "remove" or "random".
+
+- "null" replaces all values with `null`
+- "redact" replaces all values with `********`
+- "remove" will cause the column to be stripped out of the response altogether
+- "random" replaces all values with a random string
 
 **NOTE:** You will want to deploy your new service worker for dynamic data masking before deploying updates to your StarbaseDB instance, because the StarbaseDB instance will rely on the data masking worker being available (see the service bindings we added in the wrangler.toml file for reference).

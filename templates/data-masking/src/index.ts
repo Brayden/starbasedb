@@ -4,7 +4,8 @@ import { Parser } from 'node-sql-parser';
 enum DataMaskingMode {
     NULL = "null",
     REDACT = "redact",
-    RANDOM = "random"
+    RANDOM = "random",
+    REMOVE = "remove"
 }
 
 export default class DataMaskingEntrypoint extends WorkerEntrypoint {
@@ -103,6 +104,8 @@ export default class DataMaskingEntrypoint extends WorkerEntrypoint {
                 return '*******';
             case DataMaskingMode.RANDOM:
                 return Math.random().toString(36).substring(2, 15);
+            case DataMaskingMode.REMOVE:
+                return null;
         }
     }
 
@@ -196,13 +199,23 @@ export default class DataMaskingEntrypoint extends WorkerEntrypoint {
                         // If it's a SELECT *, only mask the specific column we want
                         let columnName = maskColumn.original?.toLowerCase();
                         if (row[columnName] !== undefined) {
-                            row[columnName] = this.maskDataWithMethod(row[columnName], maskColumn.method);
+                            // If the masking mode is "remove", remove the column from the row
+                            if (maskColumn.method === DataMaskingMode.REMOVE) {
+                                delete row[columnName];
+                            } else {
+                                row[columnName] = this.maskDataWithMethod(row[columnName], maskColumn.method);
+                            }
                         }
                     } else {
                         // For both regular columns and function results
                         let columnName = matchingColumn.alias?.toLowerCase() || matchingColumn.original?.toLowerCase();
                         if (row[columnName] !== undefined) {
-                            row[columnName] = this.maskDataWithMethod(row[columnName], maskColumn.method);
+                            // If the masking mode is "remove", remove the column from the row
+                            if (maskColumn.method === DataMaskingMode.REMOVE) {
+                                delete row[columnName];
+                            } else {
+                                row[columnName] = this.maskDataWithMethod(row[columnName], maskColumn.method);
+                            }
                         }
                     }
                 });
