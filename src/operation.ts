@@ -1,5 +1,15 @@
-import { Parser } from 'node-sql-parser';
 import { createResponse } from './utils';
+
+interface Env {
+    AUTHORIZATION_TOKEN: string;
+    DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
+    STUDIO_USER?: string;
+    STUDIO_PASS?: string;
+    // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
+    DATA_MASKING: {
+        maskQueryResult(sql: string, result: any, isRaw: boolean, maskingRules: any): Promise<any>;
+    }
+}
 
 export type OperationQueueItem = {
     queries: { sql: string; params?: any[] }[];
@@ -20,87 +30,16 @@ export type RawQueryResponse = {
 
 export type QueryResponse = any[] | RawQueryResponse;
 
-function maskDataWithMethod(data: any, method: 'asterisk' | 'hash' | 'random') {
-    switch (method) {
-        case 'asterisk':
-            return '*******';
-        case 'hash':
-            return 'HASH METHOD';
-        case 'random':
-            return Math.random().toString(36).substring(2, 15);
-    }
+async function afterQuery(sql: string, result: any, isRaw: boolean, sqlInstance: any, env?: Env): Promise<any> {
+    // ## DO NOT REMOVE: TEMPLATE AFTER QUERY HOOK ##
+    const maskingRulesCursor = sqlInstance.exec('SELECT * FROM data_masking_rules')
+    const maskingRules = maskingRulesCursor.toArray();
+    result = await env?.DATA_MASKING.maskQueryResult(sql, result, isRaw, maskingRules);
+
+    return result;
 }
 
-export function executeQuery(sql: string, params: any[] | undefined, isRaw: boolean, sqlInstance: any): QueryResponse {
-    const parser = new Parser();
-    const ast: any = parser.astify(sql);
-    let columnsMap: Record<string, any>[] = [];
-
-    //
-    // This would be stored somewhere else, e.g. in the database
-    let columnsToMask: Record<string, any>[] = [{
-        schema: null,
-        table: 'users',
-        original: 'name',
-        method: 'asterisk'
-    }];
-    // This would be stored somewhere else, e.g. in the database
-    //
-
-    // Handle both array and single object cases
-    const statements = Array.isArray(ast) ? ast : [ast];
-
-    statements.forEach((statement) => {
-        if (statement.type === 'select') {
-            const columns = statement.columns;
-            const schema = statement.from?.[0]?.db;
-            const table = statement.from?.[0]?.table;
-
-            if (columns.length === 1 && columns[0].expr.type === 'star') {
-                columnsMap.push({
-                    schema,
-                    table,
-                    original: '*',
-                    alias: null,
-                    functionName: null
-                });
-            } else {
-                // Existing logic for specific columns
-                columns.forEach((column: any) => {
-                    let originalColumn = '';
-                    let alias = column.as;
-                    let functionName = null;
-
-                    if (column.expr.type === 'column_ref') {
-                        originalColumn = column.expr.column;
-                    } else if (column.expr.type === 'function') {
-                        functionName = column.expr.name;
-                        column.expr.args.value.forEach((arg: any) => {
-                            if (arg.type === 'column_ref') {
-                                originalColumn += (originalColumn ? ',' : '') + arg.column;
-                            }
-                        });
-
-                        // If there's no alias, use the function expression as a placeholder
-                        if (!alias) {
-                            alias = `${functionName}(${originalColumn})`;
-                        }
-                    }
-
-                    if (originalColumn) {
-                        columnsMap.push({
-                            schema,
-                            table,
-                            original: originalColumn,
-                            alias,
-                            functionName
-                        });
-                    }
-                });
-            }
-        }
-    });
-
+export async function executeQuery(sql: string, params: any[] | undefined, isRaw: boolean, sqlInstance: any, env?: Env): Promise<QueryResponse> {
     try {
         let cursor;
         
@@ -125,139 +64,22 @@ export function executeQuery(sql: string, params: any[] | undefined, isRaw: bool
             result = cursor.toArray();
         }
 
-        // Apply masking to the result
-        let maskedResult;
-
-        if (isRaw) {
-            maskedResult = {
-                ...result,
-                rows: result.rows.map((row: any) => maskRow(row, result.columns, columnsToMask, columnsMap))
-            };
-        } else {
-            maskedResult = result.map((row: any) => maskRow(row, undefined, columnsToMask, columnsMap));
-        }
-
-        return maskedResult;
+        // Apply any post-query transformations prior to returning the result
+        return await afterQuery(sql, result, isRaw, sqlInstance, env);
     } catch (error) {
         console.error('SQL Execution Error:', error);
         throw error;
     }
 }
 
-function maskRow(row: any, columns: any[] | undefined, columnsToMask: Record<string, any>[], columnsMap: Record<string, any>[]) {
-    const defaultSchemaName = 'main';
-
-    if (columns) {
-        columnsToMask.forEach(maskColumn => {
-            // Helper function to check if schemas match
-            const schemasMatch = (schema1: string | null, schema2: string | null) => {
-                return (!schema1 && !schema2) || 
-                       (!schema1 && schema2?.toLowerCase() === defaultSchemaName) ||
-                       (!schema2 && schema1?.toLowerCase() === defaultSchemaName) ||
-                       (schema1?.toLowerCase() === schema2?.toLowerCase());
-            };
-
-            // Find all matching columns using the same logic as non-columns case
-            const matchingColumns = columnsMap.filter(mapColumn => {
-                // Handle SELECT *
-                if (mapColumn.original === '*') {
-                    return schemasMatch(mapColumn.schema, maskColumn.schema) &&
-                           mapColumn.table?.toLowerCase() === maskColumn.table?.toLowerCase();
-                }
-                
-                // Handle comma-separated columns in functions
-                if (mapColumn.original?.includes(',')) {
-                    const cols = mapColumn.original.split(',').map((col: string) => col.toLowerCase());
-                    return schemasMatch(mapColumn.schema, maskColumn.schema) &&
-                           mapColumn.table?.toLowerCase() === maskColumn.table?.toLowerCase() &&
-                           cols.includes(maskColumn.original?.toLowerCase());
-                }
-                
-                // Handle regular columns
-                return schemasMatch(mapColumn.schema, maskColumn.schema) &&
-                       mapColumn.table?.toLowerCase() === maskColumn.table?.toLowerCase() &&
-                       mapColumn.original?.toLowerCase() === maskColumn.original?.toLowerCase();
-            });
-
-            matchingColumns.forEach(matchingColumn => {
-                // Find the correct column name in the result set
-                let columnToFind = matchingColumn.original === '*' 
-                    ? maskColumn.original 
-                    : (matchingColumn.alias || matchingColumn.original);
-                
-                // Find index of the column in the results
-                const index = columns.findIndex((column: string) => 
-                    column.toLowerCase() === columnToFind?.toLowerCase()
-                );
-
-                // If the column exists, mask it
-                if (index !== -1) {
-                    row[index] = maskDataWithMethod(row[index], maskColumn.method);
-                }
-            });
-        });
-    }
-
-    if (!columns) {
-        columnsToMask.forEach(maskColumn => {
-            // Helper function to check if schemas match
-            const schemasMatch = (schema1: string | null, schema2: string | null) => {
-                return (!schema1 && !schema2) || 
-                       (!schema1 && schema2?.toLowerCase() === defaultSchemaName) ||
-                       (!schema2 && schema1?.toLowerCase() === defaultSchemaName) ||
-                       (schema1?.toLowerCase() === schema2?.toLowerCase());
-            };
-    
-            const matchingColumns = columnsMap.filter(mapColumn => {
-                // Handle SELECT *
-                if (mapColumn.original === '*') {
-                    return schemasMatch(mapColumn.schema, maskColumn.schema) &&
-                           mapColumn.table?.toLowerCase() === maskColumn.table?.toLowerCase();
-                }
-                
-                // Handle comma-separated columns in functions
-                if (mapColumn.original?.includes(',')) {
-                    const columns = mapColumn.original.split(',').map((col: string) => col.toLowerCase());
-                    return schemasMatch(mapColumn.schema, maskColumn.schema) &&
-                           mapColumn.table?.toLowerCase() === maskColumn.table?.toLowerCase() &&
-                           columns.includes(maskColumn.original?.toLowerCase());
-                }
-                
-                // Handle regular columns
-                return schemasMatch(mapColumn.schema, maskColumn.schema) &&
-                       mapColumn.table?.toLowerCase() === maskColumn.table?.toLowerCase() &&
-                       mapColumn.original?.toLowerCase() === maskColumn.original?.toLowerCase();
-            });
-    
-            matchingColumns.forEach(matchingColumn => {
-                if (matchingColumn.original === '*') {
-                    // If it's a SELECT *, only mask the specific column we want
-                    let columnName = maskColumn.original?.toLowerCase();
-                    if (row[columnName] !== undefined) {
-                        row[columnName] = maskDataWithMethod(row[columnName], maskColumn.method);
-                    }
-                } else {
-                    // For both regular columns and function results
-                    let columnName = matchingColumn.alias?.toLowerCase() || matchingColumn.original?.toLowerCase();
-                    if (row[columnName] !== undefined) {
-                        row[columnName] = maskDataWithMethod(row[columnName], maskColumn.method);
-                    }
-                }
-            });
-        });
-    }
-
-    return row;
-}
-
-export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, sqlInstance: any, ctx: any): Promise<any[]> {
-    return ctx.storage.transactionSync(() => {
+export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, sqlInstance: any, ctx: any, env?: Env): Promise<any[]> {
+    return ctx.storage.transactionSync(async () => {
         const results = [];
 
         try {
             for (const queryObj of queries) {
                 const { sql, params } = queryObj;
-                const result = executeQuery(sql, params, isRaw, sqlInstance);
+                const result = await executeQuery(sql, params, isRaw, sqlInstance, env);
                 results.push(result);
             }
 
@@ -316,7 +138,8 @@ export async function processNextOperation(
     sqlInstance: any,
     operationQueue: OperationQueueItem[],
     ctx: any,
-    processingOperation: { value: boolean }
+    processingOperation: { value: boolean },
+    env: Env
 ) {
     if (processingOperation.value) {
         // Already processing an operation
@@ -333,12 +156,12 @@ export async function processNextOperation(
 
     try {
         let result;
-
+        
         if (isTransaction) {
-            result = await executeTransaction(queries, isRaw, sqlInstance, ctx);
+            result = await executeTransaction(queries, isRaw, sqlInstance, ctx, env);
         } else {
             const { sql, params } = queries[0];
-            result = executeQuery(sql, params, isRaw, sqlInstance);
+            result = await executeQuery(sql, params, isRaw, sqlInstance, env);
         }
 
         resolve(result);
@@ -346,6 +169,6 @@ export async function processNextOperation(
         reject(error.message || 'Operation failed.');
     } finally {
         processingOperation.value = false;
-        await processNextOperation(sqlInstance, operationQueue, ctx, processingOperation);
+        await processNextOperation(sqlInstance, operationQueue, ctx, processingOperation, env);
     }
 }

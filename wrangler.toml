@@ -6,6 +6,10 @@ account_id = ""
 
 # Service Bindings
 ## DO NOT REMOVE: TEMPLATE SERVICES ##
+[[services]]
+binding = "DATA_MASKING"
+service = "starbasedb_data_masking"
+entrypoint = "DataMaskingEntrypoint"
 
 # Workers Logs
 # Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
