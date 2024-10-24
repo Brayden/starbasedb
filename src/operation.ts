@@ -1,17 +1,6 @@
 import { createResponse } from './utils';
 import { Env } from './index';
 
-// interface Env {
-//     AUTHORIZATION_TOKEN: string;
-//     DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
-//     STUDIO_USER?: string;
-//     STUDIO_PASS?: string;
-//     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
-//     DATA_MASKING: {
-//         maskQueryResult(sql: string, result: any, isRaw: boolean, maskingRules: any): Promise<any>;
-//     }
-// }
-
 export type OperationQueueItem = {
     queries: { sql: string; params?: any[] }[];
     isTransaction: boolean;
