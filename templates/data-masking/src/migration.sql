@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS data_masking_rules (
     table_name TEXT NOT NULL,
     column_name TEXT NOT NULL,
     masking_mode TEXT NOT NULL CHECK (masking_mode IN ('null', 'redact', 'random', 'remove')),
-    allow_list TEXT DEFAULT '[]',
     created_at TEXT DEFAULT (datetime('now')),
     
     -- Ensure we don't have duplicate rules for the same column
