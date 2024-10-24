@@ -19,9 +19,6 @@ export interface Env {
     STUDIO_USER?: string;
     STUDIO_PASS?: string;
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
-    DATA_MASKING: {
-        maskQueryResult(sql: string, result: any, isRaw: boolean, maskingRules: any): Promise<any>;
-    }
 }
 
 export class DatabaseDurableObject extends DurableObject<Env> {

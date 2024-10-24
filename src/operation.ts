@@ -33,8 +33,6 @@ export type QueryResponse = any[] | RawQueryResponse;
 
 async function afterQuery(sql: string, result: any, isRaw: boolean, sqlInstance: any, env?: Env): Promise<any> {
     // ## DO NOT REMOVE: TEMPLATE AFTER QUERY HOOK ##
-    const maskingRulesCursor = sqlInstance.exec('SELECT * FROM data_masking_rules')
-    result = await env?.DATA_MASKING.maskQueryResult(sql, result, isRaw, maskingRulesCursor.toArray());
 
     return result;
 }
