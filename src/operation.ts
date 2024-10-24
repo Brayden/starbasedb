@@ -1,15 +1,16 @@
 import { createResponse } from './utils';
+import { Env } from './index';
 
-interface Env {
-    AUTHORIZATION_TOKEN: string;
-    DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
-    STUDIO_USER?: string;
-    STUDIO_PASS?: string;
-    // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
-    DATA_MASKING: {
-        maskQueryResult(sql: string, result: any, isRaw: boolean, maskingRules: any): Promise<any>;
-    }
-}
+// interface Env {
+//     AUTHORIZATION_TOKEN: string;
+//     DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
+//     STUDIO_USER?: string;
+//     STUDIO_PASS?: string;
+//     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
+//     DATA_MASKING: {
+//         maskQueryResult(sql: string, result: any, isRaw: boolean, maskingRules: any): Promise<any>;
+//     }
+// }
 
 export type OperationQueueItem = {
     queries: { sql: string; params?: any[] }[];
@@ -33,8 +34,7 @@ export type QueryResponse = any[] | RawQueryResponse;
 async function afterQuery(sql: string, result: any, isRaw: boolean, sqlInstance: any, env?: Env): Promise<any> {
     // ## DO NOT REMOVE: TEMPLATE AFTER QUERY HOOK ##
     const maskingRulesCursor = sqlInstance.exec('SELECT * FROM data_masking_rules')
-    const maskingRules = maskingRulesCursor.toArray();
-    result = await env?.DATA_MASKING.maskQueryResult(sql, result, isRaw, maskingRules);
+    result = await env?.DATA_MASKING.maskQueryResult(sql, result, isRaw, maskingRulesCursor.toArray());
 
     return result;
 }

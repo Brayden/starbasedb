@@ -13,14 +13,14 @@ import { handleApiRequest } from "./api";
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
-interface Env {
+export interface Env {
     AUTHORIZATION_TOKEN: string;
     DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
     STUDIO_USER?: string;
     STUDIO_PASS?: string;
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
     DATA_MASKING: {
-        maskQueryResult(sql: string, result: any, isRaw: boolean): Promise<any>;
+        maskQueryResult(sql: string, result: any, isRaw: boolean, maskingRules: any): Promise<any>;
     }
 }
 
