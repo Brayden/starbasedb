@@ -2,5 +2,7 @@
 
 interface Env {
 	AUTHORIZATION_TOKEN: "ABC123";
-	DATABASE_DURABLE_OBJECT: DurableObjectNamespace<import("./src/index").DatabaseDurableObject>;
+	STUDIO_USER: "";
+	STUDIO_PASS: "";
+	STARBASE_DURABLE_OBJECT: DurableObjectNamespace<import("./src/index").StarbaseDurableObject>;
 }

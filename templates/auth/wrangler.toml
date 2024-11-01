@@ -3,7 +3,7 @@ main = "./src/index.ts"
 compatibility_date = "2024-09-25"
 
 [durable_objects]
-bindings = [{ name = "DATABASE_DURABLE_OBJECT", class_name = "DatabaseDurableObject", script_name = "starbasedb" }]
+bindings = [{ name = "STARBASE_DURABLE_OBJECT", class_name = "StarbaseDurableObject", script_name = "starbasedb" }]
 
 [vars]
 REQUIRE_EMAIL_CONFIRM = 1
