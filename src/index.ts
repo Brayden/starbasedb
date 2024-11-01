@@ -5,8 +5,6 @@ import { createResponse } from "./utils";
 // someone is directly deploying Starbase from the repository.
 export { StarbaseDurableObject } from "./starbase";
 
-const DURABLE_OBJECT_ID = "sql-durable-object";
-
 export default {
   /**
    * This is the standard fetch handler for a Cloudflare Worker
@@ -71,7 +69,7 @@ export default {
      * Durable Object stub to interact with the Durable Object.
      */
     let id: DurableObjectId =
-      env.STARBASE_DURABLE_OBJECT.idFromName(DURABLE_OBJECT_ID);
+      env.STARBASE_DURABLE_OBJECT.idFromName(env.DURABLE_OBJECT_ID);
     let stub = env.STARBASE_DURABLE_OBJECT.get(id);
 
     // ## DO NOT REMOVE: TEMPLATE ROUTING ##

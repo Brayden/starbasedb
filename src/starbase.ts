@@ -27,6 +27,7 @@ export type StarbaseDurableObjectConfiguration = {
   websocketEnabled?: boolean;
   statusEnabled?: boolean;
   restEnabled?: boolean;
+  onRequest?: (request: Request, ctx: DurableObjectState) => (Promise<Response | void> | Response | void);
 };
 
 export class StarbaseDurableObject extends DurableObject {
@@ -204,7 +205,7 @@ export class StarbaseDurableObject extends DurableObject {
     );
   }
 
-  async serve(request: Request, config?: StarbaseDurableObjectConfiguration) {
+  async serve(request: Request, config?: StarbaseDurableObjectConfiguration): Promise<Response> {
     const url = new URL(request.url);
 
     const exportEnabled = toBooleanValue(config?.exportEnabled, true);
@@ -316,7 +317,14 @@ export class StarbaseDurableObject extends DurableObject {
         tableName,
         request
       );
+    } else if (config?.onRequest) {
+      const response = await config.onRequest(request, this.ctx);
+
+      if (response) {
+        return response;
+      }
     }
+
 
     return createResponse(undefined, "Unknown operation", 400);
   }

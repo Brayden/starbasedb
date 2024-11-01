@@ -28,6 +28,7 @@ new_sqlite_classes = ["StarbaseDurableObject"] # Array of new classes
 
 [vars]
 AUTHORIZATION_TOKEN = "ABC123"
+DURABLE_OBJECT_ID = "sql-durable-object"
 STUDIO_USER = ""
 STUDIO_PASS = ""
 
