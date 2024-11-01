@@ -17,17 +17,20 @@ enabled = true
 # Durable Objects can live for as long as needed. Use these when you need a long-running "server", such as in realtime apps.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#durable-objects
 [[durable_objects.bindings]]
-name = "DATABASE_DURABLE_OBJECT"
-class_name = "DatabaseDurableObject"
+name = "STARBASE_DURABLE_OBJECT"
+class_name = "StarbaseDurableObject"
 
 # Durable Object migrations.
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#migrations
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["DatabaseDurableObject"] # Array of new classes
+new_sqlite_classes = ["StarbaseDurableObject"] # Array of new classes
 
 [vars]
 AUTHORIZATION_TOKEN = "ABC123"
+DURABLE_OBJECT_ID = "sql-durable-object"
+STUDIO_USER = ""
+STUDIO_PASS = ""
 
 # Uncomment the section below to create a user for logging into your database UI.
 # You can access the Studio UI at: https://your_endpoint/studio

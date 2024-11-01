@@ -1,12 +1,22 @@
 {
-  "name": "durable-object-starter",
-  "version": "0.0.0",
-  "private": true,
+  "name": "starbasedb",
+  "version": "0.1.0",
+  "type": "module",
+  "types": "./src/starbase.ts",
+  "exports": {
+    ".": "./src/starbase.ts"
+  },
+  "files": [
+    "src/**/*.ts"
+  ],
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "start": "wrangler dev",
     "cf-typegen": "wrangler types"
+  },
+  "peerDependencies": {
+    "@cloudflare/workers-types": "^4"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240925.0",

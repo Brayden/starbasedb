@@ -2,5 +2,8 @@
 
 interface Env {
 	AUTHORIZATION_TOKEN: "ABC123";
-	DATABASE_DURABLE_OBJECT: DurableObjectNamespace<import("./src/index").DatabaseDurableObject>;
+	DURABLE_OBJECT_ID: "sql-durable-object";
+	STUDIO_USER: "";
+	STUDIO_PASS: "";
+	STARBASE_DURABLE_OBJECT: DurableObjectNamespace<import("./src/index").StarbaseDurableObject>;
 }

@@ -7,5 +7,5 @@ interface Env {
 	PASSWORD_REQUIRE_LOWERCASE: true;
 	PASSWORD_REQUIRE_NUMBER: false;
 	PASSWORD_REQUIRE_SPECIAL: true;
-	DATABASE_DURABLE_OBJECT: DurableObjectNamespace /* DatabaseDurableObject from starbasedb */;
+	STARBASE_DURABLE_OBJECT: DurableObjectNamespace /* StarbaseDurableObject from starbasedb */;
 }
