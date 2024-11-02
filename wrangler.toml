@@ -33,3 +33,12 @@ AUTHORIZATION_TOKEN = "ABC123"
 # You can access the Studio UI at: https://your_endpoint/studio
 # STUDIO_USER = "admin"
 # STUDIO_PASS = "123456"
+
+# External database source details
+# This enables Starbase to connect to an external data source
+EXTERNAL_DB_TYPE = "postgres"
+EXTERNAL_DB_HOST = ""
+EXTERNAL_DB_NAME = ""
+EXTERNAL_DB_USER = ""
+EXTERNAL_DB_PASS = ""
+EXTERNAL_DB_PORT = "0"
