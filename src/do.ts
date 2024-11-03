@@ -5,6 +5,7 @@ import { createResponse, QueryRequest, QueryTransactionRequest } from "./utils";
 export class DatabaseDurableObject extends DurableObject {
     // Durable storage for the SQL database
     public sql: SqlStorage;
+    public storage: DurableObjectStorage;
 
     // Queue of operations to be processed, with each operation containing a list of queries to be executed
     private operationQueue: Array<OperationQueueItem> = [];
@@ -22,6 +23,7 @@ export class DatabaseDurableObject extends DurableObject {
     constructor(ctx: DurableObjectState, env: Env) {
         super(ctx, env);
         this.sql = ctx.storage.sql;
+        this.storage = ctx.storage;
     }
 
     /**
@@ -86,8 +88,8 @@ export class DatabaseDurableObject extends DurableObject {
         }
     }
 
-    executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, sqlInstance: any, ctx: any): Promise<any[]> {
-        return ctx.storage.transactionSync(() => {
+    public executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean): any[] {
+        return this.storage.transactionSync(() => {
             const results = [];
 
             try {
@@ -105,84 +107,84 @@ export class DatabaseDurableObject extends DurableObject {
         });
     }
 
-    enqueueOperation(
-        queries: { sql: string; params?: any[] }[],
-        isTransaction: boolean,
-        isRaw: boolean,
-        operationQueue: any[],
-        processNextOperation: () => Promise<void>
-    ): Promise<{ result?: any, error?: string | undefined, status: number }> {
-        const MAX_WAIT_TIME = 25000;
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                reject(createResponse(undefined, 'Operation timed out.', 503));
-            }, MAX_WAIT_TIME);
+    // enqueueOperation(
+    //     queries: { sql: string; params?: any[] }[],
+    //     isTransaction: boolean,
+    //     isRaw: boolean,
+    //     operationQueue: any[],
+    //     processNextOperation: () => Promise<void>
+    // ): Promise<{ result?: any, error?: string | undefined, status: number }> {
+    //     const MAX_WAIT_TIME = 25000;
+    //     return new Promise((resolve, reject) => {
+    //         const timeout = setTimeout(() => {
+    //             reject(createResponse(undefined, 'Operation timed out.', 503));
+    //         }, MAX_WAIT_TIME);
 
-            operationQueue.push({
-                queries,
-                isTransaction,
-                isRaw,
-                resolve: (value: any) => {
-                    clearTimeout(timeout);
+    //         operationQueue.push({
+    //             queries,
+    //             isTransaction,
+    //             isRaw,
+    //             resolve: (value: any) => {
+    //                 clearTimeout(timeout);
 
-                    resolve({
-                        result: value,
-                        error: undefined,
-                        status: 200
-                    })
-                },
-                reject: (reason?: any) => {
-                    clearTimeout(timeout);
+    //                 resolve({
+    //                     result: value,
+    //                     error: undefined,
+    //                     status: 200
+    //                 })
+    //             },
+    //             reject: (reason?: any) => {
+    //                 clearTimeout(timeout);
 
-                    reject({
-                        result: undefined,
-                        error: reason ?? 'Operation failed.',
-                        status: 500
-                    })
-                }
-            });
+    //                 reject({
+    //                     result: undefined,
+    //                     error: reason ?? 'Operation failed.',
+    //                     status: 500
+    //                 })
+    //             }
+    //         });
 
-            processNextOperation().catch((err) => {
-                console.error('Error processing operation queue:', err);
-            });
-        });
-    }
+    //         processNextOperation().catch((err) => {
+    //             console.error('Error processing operation queue:', err);
+    //         });
+    //     });
+    // }
 
-    async processNextOperation(
-        sqlInstance: any,
-        operationQueue: OperationQueueItem[],
-        ctx: any,
-        processingOperation: { value: boolean }
-    ) {
-        if (processingOperation.value) {
-            // Already processing an operation
-            return;
-        }
+    // async processNextOperation(
+    //     sqlInstance: any,
+    //     operationQueue: OperationQueueItem[],
+    //     ctx: any,
+    //     processingOperation: { value: boolean }
+    // ) {
+    //     if (processingOperation.value) {
+    //         // Already processing an operation
+    //         return;
+    //     }
 
-        if (operationQueue.length === 0) {
-            // No operations remaining to process
-            return;
-        }
+    //     if (operationQueue.length === 0) {
+    //         // No operations remaining to process
+    //         return;
+    //     }
 
-        processingOperation.value = true;
-        const { queries, isTransaction, isRaw, resolve, reject } = operationQueue.shift()!;
+    //     processingOperation.value = true;
+    //     const { queries, isTransaction, isRaw, resolve, reject } = operationQueue.shift()!;
 
-        try {
-            let result;
+    //     try {
+    //         let result;
 
-            if (isTransaction) {
-                result = await this.executeTransaction(queries, isRaw, sqlInstance, ctx);
-            } else {
-                const { sql, params } = queries[0];
-                result = this.executeQuery(sql, params, isRaw);
-            }
+    //         if (isTransaction) {
+    //             result = await this.executeTransaction(queries, isRaw, sqlInstance, ctx);
+    //         } else {
+    //             const { sql, params } = queries[0];
+    //             result = this.executeQuery(sql, params, isRaw);
+    //         }
 
-            resolve(result);
-        } catch (error: any) {
-            reject(error.message || 'Operation failed.');
-        } finally {
-            processingOperation.value = false;
-            await this.processNextOperation(sqlInstance, operationQueue, ctx, processingOperation);
-        }
-    }
+    //         resolve(result);
+    //     } catch (error: any) {
+    //         reject(error.message || 'Operation failed.');
+    //     } finally {
+    //         processingOperation.value = false;
+    //         await this.processNextOperation(sqlInstance, operationQueue, ctx, processingOperation);
+    //     }
+    // }
 }

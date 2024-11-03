@@ -49,3 +49,18 @@ export async function executeQuery(sql: string, params: any[] | undefined, isRaw
         return items;
     } 
 }
+
+export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, dataSource: DataSource): Promise<QueryResponse> {
+    if (dataSource.source === 'internal') {
+        const response = await dataSource.internalConnection?.durableObject.executeTransaction(queries, isRaw);
+        return response ?? [];
+    } else {
+        if (!dataSource.externalConnection) {
+            throw new Error('External connection not found.');
+        }
+
+        // TODO: Implement transaction for external source
+    }
+
+    return [];
+}

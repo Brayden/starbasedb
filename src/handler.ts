@@ -7,7 +7,7 @@ import { importTableFromCsvRoute } from "./import/csv";
 import { importDumpRoute } from "./import/dump";
 import { importTableFromJsonRoute } from "./import/json";
 import { LiteREST } from "./literest";
-import { executeQuery, OperationQueueItem } from "./operation";
+import { executeQuery, executeTransaction, OperationQueueItem } from "./operation";
 import { createResponse, createResponseFromOperationResponse, QueryRequest, QueryTransactionRequest } from "./utils";
 
 export class Handler {
@@ -88,9 +88,6 @@ export class Handler {
     }
 
     async queryRoute(request: Request, isRaw: boolean): Promise<Response> {
-        // TODO:
-        // Is it for the `internal` or `external` source?
-
         if (!this.dataSource) {
             return createResponse(undefined, 'Data source not found.', 400);
         }
@@ -122,6 +119,9 @@ export class Handler {
 
                     return { sql, params };
                 });
+
+                const response = await executeTransaction(queries, isRaw, this.dataSource);
+                return createResponse(response, undefined, 200);
 
                 // try {
                 //     const response = await enqueueOperation(

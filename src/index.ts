@@ -41,6 +41,7 @@ export type DataSource = {
 type DatabaseStub = DurableObjectStub & {
     fetch: (init?: RequestInit | Request) => Promise<Response>;
     executeQuery(sql: string, params: any[] | undefined, isRaw: boolean): QueryResponse;
+    executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean): any[];
 };
 
 interface InternalConnection {
@@ -98,6 +99,9 @@ export default {
          * Retrieve the Durable Object identifier from the environment bindings and instantiate a
          * Durable Object stub to interact with the Durable Object.
          */
+        // Get location hint from wrangler.toml environment variables
+        // const locationHint = env.DATABASE_LOCATION_HINT ?? 'enam';
+        // let stub = env.DATABASE_DURABLE_OBJECT.get(id, { locationHint: "enam" });
         let id: DurableObjectId = env.DATABASE_DURABLE_OBJECT.idFromName(DURABLE_OBJECT_ID);
 		let stub = env.DATABASE_DURABLE_OBJECT.get(id);
 
