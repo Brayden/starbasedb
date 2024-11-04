@@ -16,9 +16,23 @@ const DURABLE_OBJECT_ID = 'sql-durable-object';
 interface Env {
     AUTHORIZATION_TOKEN: string;
     DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
+    REGION: string;
     STUDIO_USER?: string;
     STUDIO_PASS?: string;
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
+}
+
+enum RegionLocationHint {
+    AUTO = 'auto',
+    WNAM = 'wnam', // Western North America
+    ENAM = 'enam', // Eastern North America
+    SAM = 'sam', // South America
+    WEUR = 'weur', // Western Europe
+    EEUR = 'eeur', // Eastern Europe
+    APAC = 'apac', // Asia Pacific
+    OC = 'oc', // Oceania
+    AFR = 'afr', // Africa
+    ME = 'me', // Middle East
 }
 
 export class DatabaseDurableObject extends DurableObject {
@@ -165,6 +179,11 @@ export class DatabaseDurableObject extends DurableObject {
             return this.clientConnected();
         } else if (request.method === 'GET' && url.pathname === '/status') {
             return this.statusRoute(request);
+        } else if (request.method === 'GET' && url.pathname === '/status/trace') {
+            const response = await fetch('https://cloudflare.com/cdn-cgi/trace');
+            return new Response(response.body, {
+                headers: response.headers
+            });
         } else if (url.pathname.startsWith('/rest')) {
             return await this.liteREST.handleRequest(request);
         } else if (request.method === 'GET' && url.pathname === '/export/dump') {
@@ -294,8 +313,9 @@ export default {
          * Retrieve the Durable Object identifier from the environment bindings and instantiate a
          * Durable Object stub to interact with the Durable Object.
          */
-        let id: DurableObjectId = env.DATABASE_DURABLE_OBJECT.idFromName(DURABLE_OBJECT_ID);
-		let stub = env.DATABASE_DURABLE_OBJECT.get(id);
+        const region = env.REGION ?? RegionLocationHint.AUTO;
+        const id: DurableObjectId = env.DATABASE_DURABLE_OBJECT.idFromName(DURABLE_OBJECT_ID);
+        const stub = region !== RegionLocationHint.AUTO ? env.DATABASE_DURABLE_OBJECT.get(id, { locationHint: region as DurableObjectLocationHint }) : env.DATABASE_DURABLE_OBJECT.get(id);
 
         // ## DO NOT REMOVE: TEMPLATE ROUTING ##
 
