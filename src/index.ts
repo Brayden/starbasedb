@@ -13,7 +13,7 @@ import { handleApiRequest } from "./api";
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
-interface Env {
+export interface Env {
     AUTHORIZATION_TOKEN: string;
     DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
     REGION: string;
@@ -35,7 +35,7 @@ enum RegionLocationHint {
     ME = 'me', // Middle East
 }
 
-export class DatabaseDurableObject extends DurableObject {
+export class DatabaseDurableObject extends DurableObject<Env> {
     // Durable storage for the SQL database
     public sql: SqlStorage;
 
@@ -89,7 +89,7 @@ export class DatabaseDurableObject extends DurableObject {
                 false,
                 false,
                 this.operationQueue,
-                () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+                () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation, this.env)
             );
 
             return response;
@@ -127,7 +127,7 @@ export class DatabaseDurableObject extends DurableObject {
                         true,
                         isRaw,
                         this.operationQueue,
-                        () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+                        () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation, this.env)
                     );
 
                     return createResponseFromOperationResponse(response);
@@ -147,7 +147,7 @@ export class DatabaseDurableObject extends DurableObject {
                     false,
                     isRaw,
                     this.operationQueue,
-                    () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+                    () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation, this.env)
                 );
                 
                 return createResponseFromOperationResponse(response);
@@ -242,7 +242,7 @@ export class DatabaseDurableObject extends DurableObject {
                 false,
                 false,
                 this.operationQueue,
-                () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
+                () => processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation, this.env)
             );
 
             ws.send(JSON.stringify(response.result));

@@ -1,4 +1,5 @@
 import { createResponse } from './utils';
+import { Env } from './index';
 
 export type OperationQueueItem = {
     queries: { sql: string; params?: any[] }[];
@@ -19,7 +20,13 @@ export type RawQueryResponse = {
 
 export type QueryResponse = any[] | RawQueryResponse;
 
-export function executeQuery(sql: string, params: any[] | undefined, isRaw: boolean, sqlInstance: any): QueryResponse {
+async function afterQuery(sql: string, result: any, isRaw: boolean, sqlInstance: any, env?: Env): Promise<any> {
+    // ## DO NOT REMOVE: TEMPLATE AFTER QUERY HOOK ##
+
+    return result;
+}
+
+export async function executeQuery(sql: string, params: any[] | undefined, isRaw: boolean, sqlInstance: any, env?: Env): Promise<QueryResponse> {
     try {
         let cursor;
         
@@ -44,21 +51,22 @@ export function executeQuery(sql: string, params: any[] | undefined, isRaw: bool
             result = cursor.toArray();
         }
 
-        return result;
+        // Apply any post-query transformations prior to returning the result
+        return await afterQuery(sql, result, isRaw, sqlInstance, env);
     } catch (error) {
         console.error('SQL Execution Error:', error);
         throw error;
     }
 }
 
-export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, sqlInstance: any, ctx: any): Promise<any[]> {
-    return ctx.storage.transactionSync(() => {
+export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, sqlInstance: any, ctx: any, env?: Env): Promise<any[]> {
+    return ctx.storage.transactionSync(async () => {
         const results = [];
 
         try {
             for (const queryObj of queries) {
                 const { sql, params } = queryObj;
-                const result = executeQuery(sql, params, isRaw, sqlInstance);
+                const result = await executeQuery(sql, params, isRaw, sqlInstance);
                 results.push(result);
             }
 
@@ -117,7 +125,8 @@ export async function processNextOperation(
     sqlInstance: any,
     operationQueue: OperationQueueItem[],
     ctx: any,
-    processingOperation: { value: boolean }
+    processingOperation: { value: boolean },
+    env: Env
 ) {
     if (processingOperation.value) {
         // Already processing an operation
@@ -136,10 +145,10 @@ export async function processNextOperation(
         let result;
 
         if (isTransaction) {
-            result = await executeTransaction(queries, isRaw, sqlInstance, ctx);
+            result = await executeTransaction(queries, isRaw, sqlInstance, ctx, env);
         } else {
             const { sql, params } = queries[0];
-            result = executeQuery(sql, params, isRaw, sqlInstance);
+            result = await executeQuery(sql, params, isRaw, sqlInstance, env);
         }
 
         resolve(result);
@@ -147,6 +156,6 @@ export async function processNextOperation(
         reject(error.message || 'Operation failed.');
     } finally {
         processingOperation.value = false;
-        await processNextOperation(sqlInstance, operationQueue, ctx, processingOperation);
+        await processNextOperation(sqlInstance, operationQueue, ctx, processingOperation, env);
     }
 }
