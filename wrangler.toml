@@ -24,7 +24,7 @@ class_name = "DatabaseDurableObject"
 # Docs: https://developers.cloudflare.com/workers/wrangler/configuration/#migrations
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["DatabaseDurableObject"] # Array of new classes
+new_sqlite_classes = ["DatabaseDurableObject"]
 
 [vars]
 AUTHORIZATION_TOKEN = "ABC123"
