@@ -1,25 +1,27 @@
-import { DurableObject } from "cloudflare:workers";
-import { createResponse, createResponseFromOperationResponse, QueryRequest, QueryTransactionRequest } from './utils';
-import { LiteREST } from './literest';
+import { createResponse } from './utils';
 import handleStudioRequest from "./studio";
-import { dumpDatabaseRoute } from './export/dump';
-import { exportTableToJsonRoute } from './export/json';
-import { exportTableToCsvRoute } from './export/csv';
-import { importDumpRoute } from './import/dump';
-import { importTableFromJsonRoute } from './import/json';
-import { importTableFromCsvRoute } from './import/csv';
-import { handleApiRequest } from "./api";
 import { Handler } from "./handler";
 import { QueryResponse } from "./operation";
 export { DatabaseDurableObject } from './do'; 
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
-interface Env {
+export interface Env {
     AUTHORIZATION_TOKEN: string;
     DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
+
+    // Studio credentials
     STUDIO_USER?: string;
     STUDIO_PASS?: string;
+
+    // External database source details
+    EXTERNAL_DB_TYPE?: string;
+    EXTERNAL_DB_HOST?: string;
+    EXTERNAL_DB_NAME?: string;
+    EXTERNAL_DB_USER?: string;
+    EXTERNAL_DB_PASS?: string;
+    EXTERNAL_DB_PORT?: string;
+
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
 }
 
@@ -33,9 +35,12 @@ export type DataSource = {
     request: Request;
     internalConnection?: InternalConnection;
     externalConnection?: {
-        // API Key for Outerbase which currently controls querying external data sources
         outerbaseApiKey: string;
     };
+}
+
+interface InternalConnection {
+    durableObject: DatabaseStub;
 }
 
 type DatabaseStub = DurableObjectStub & {
@@ -43,10 +48,6 @@ type DatabaseStub = DurableObjectStub & {
     executeQuery(sql: string, params: any[] | undefined, isRaw: boolean): QueryResponse;
     executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean): any[];
 };
-
-interface InternalConnection {
-    durableObject: DatabaseStub;
-}
 
 export default {
 	/**
@@ -58,7 +59,8 @@ export default {
 	 * @returns The response to be sent back to the client
 	 */
 	async fetch(request, env, ctx): Promise<Response> {
-        const pathname = new URL(request.url).pathname;
+        const url = new URL(request.url);
+        const pathname = url.pathname;
         const isWebSocket = request.headers.get("Upgrade") === "websocket";
 
         /**
@@ -87,7 +89,6 @@ export default {
              * Web socket connections cannot pass in an Authorization header into their requests,
              * so we can use a query parameter to validate the connection.
              */
-            const url = new URL(request.url);
             const token = url.searchParams.get('token');
 
             if (token !== env.AUTHORIZATION_TOKEN) {
@@ -99,13 +100,10 @@ export default {
          * Retrieve the Durable Object identifier from the environment bindings and instantiate a
          * Durable Object stub to interact with the Durable Object.
          */
-        // Get location hint from wrangler.toml environment variables
-        // const locationHint = env.DATABASE_LOCATION_HINT ?? 'enam';
-        // let stub = env.DATABASE_DURABLE_OBJECT.get(id, { locationHint: "enam" });
         let id: DurableObjectId = env.DATABASE_DURABLE_OBJECT.idFromName(DURABLE_OBJECT_ID);
 		let stub = env.DATABASE_DURABLE_OBJECT.get(id);
 
-        const source: Source = request.headers.get('X-Starbase-Source') as Source ?? 'internal';
+        const source: Source = request.headers.get('X-Starbase-Source') as Source ?? url.searchParams.get('source') as Source ?? 'internal';
         const dataSource: DataSource = {
             source: source,
             request: request.clone(),
@@ -113,11 +111,11 @@ export default {
                 durableObject: stub as unknown as DatabaseStub,
             },
             externalConnection: {
-                outerbaseApiKey: request.headers.get('X-Outerbase-Source-Token') ?? '',
+                outerbaseApiKey: request.headers.get('X-Outerbase-Source-Token') ?? url.searchParams.get('outerbaseApiKey') ?? '',
             },
         };
 
-        const response = await new Handler().handle(request, dataSource);
+        const response = await new Handler().handle(request, dataSource, env);
 
         // ## DO NOT REMOVE: TEMPLATE ROUTING ##
 

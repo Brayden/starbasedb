@@ -1,5 +1,4 @@
-import { DataSource, Source } from '.';
-import { createResponse } from './utils';
+import { DataSource } from '.';
 
 export type OperationQueueItem = {
     queries: { sql: string; params?: any[] }[];
@@ -20,7 +19,12 @@ export type RawQueryResponse = {
 
 export type QueryResponse = any[] | RawQueryResponse;
 
-export async function executeQuery(sql: string, params: any[] | undefined, isRaw: boolean, dataSource: DataSource): Promise<QueryResponse> {
+export async function executeQuery(sql: string, params: any | undefined, isRaw: boolean, dataSource?: DataSource): Promise<QueryResponse> {
+    if (!dataSource) {
+        console.error('Data source not found.')
+        return []
+    }
+
     if (dataSource.source === 'internal') {
         const response = await dataSource.internalConnection?.durableObject.executeQuery(sql, params, isRaw);
         return response ?? [];
@@ -28,8 +32,6 @@ export async function executeQuery(sql: string, params: any[] | undefined, isRaw
         if (!dataSource.externalConnection) {
             throw new Error('External connection not found.');
         }
-
-        // TODO: Can we try to handle `isRaw` here as well even though it's not supported by Outerbase?
 
         const API_URL = 'https://app.outerbase.com'
         const response = await fetch(`${API_URL}/api/v1/ezql/raw`, {
@@ -40,7 +42,8 @@ export async function executeQuery(sql: string, params: any[] | undefined, isRaw
             },
             body: JSON.stringify({
                 query: sql,
-                params: params,
+                // Params does not support arrays, so we ensure we only pass them an object.
+                params: Array.isArray(params) ? {} : params,
             }),
         })
 
@@ -50,7 +53,12 @@ export async function executeQuery(sql: string, params: any[] | undefined, isRaw
     } 
 }
 
-export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, dataSource: DataSource): Promise<QueryResponse> {
+export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, dataSource?: DataSource): Promise<QueryResponse> {
+    if (!dataSource) {
+        console.error('Data source not found.')
+        return []
+    }
+    
     if (dataSource.source === 'internal') {
         const response = await dataSource.internalConnection?.durableObject.executeTransaction(queries, isRaw);
         return response ?? [];
@@ -59,8 +67,27 @@ export async function executeTransaction(queries: { sql: string; params?: any[] 
             throw new Error('External connection not found.');
         }
 
-        // TODO: Implement transaction for external source
-    }
+        const API_URL = 'https://app.outerbase.com';
+        const results = [];
 
-    return [];
+        for (const query of queries) {
+            const response = await fetch(`${API_URL}/api/v1/ezql/raw`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Source-Token': dataSource.externalConnection.outerbaseApiKey,
+                },
+                body: JSON.stringify({
+                    query: query.sql,
+                    // Params does not support arrays, so we ensure we only pass them an object
+                    params: Array.isArray(query.params) ? {} : query.params,
+                }),
+            });
+
+            const result: any = await response.json();
+            results.push(result.response.results?.items);
+        }
+
+        return results;
+    }
 }

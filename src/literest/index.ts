@@ -1,23 +1,18 @@
-import { DurableObjectState } from "@cloudflare/workers-types";
 import { createResponse } from '../utils';
-import { enqueueOperation, OperationQueueItem, processNextOperation } from '../operation';
+import { DataSource, Source } from "..";
+import { executeQuery, executeTransaction } from "../operation";
+import { Env } from "../index"
 
 export class LiteREST {
-    private sql: SqlStorage;
-    private operationQueue: Array<OperationQueueItem>;
-    private processingOperation: { value: boolean };
-    private state: DurableObjectState;
+    private dataSource: DataSource;
+    private env: Env;
 
     constructor(
-        state: DurableObjectState,
-        operationQueue: Array<OperationQueueItem>,
-        processingOperation: { value: boolean },
-        sql: SqlStorage
+        dataSource: DataSource,
+        env: Env
     ) {
-        this.state = state;
-        this.sql = sql;
-        this.operationQueue = operationQueue;
-        this.processingOperation = processingOperation;
+        this.dataSource = dataSource;
+        this.env = env;
     }
 
     /**
@@ -34,9 +29,21 @@ export class LiteREST {
      * @param tableName - The name of the table.
      * @returns An array of primary key column names.
      */
-    private getPrimaryKeyColumns(tableName: string): string[] {
-        const cursor = this.sql.exec(`PRAGMA table_info(${tableName});`);
-        const schemaInfo = cursor.toArray();
+    private async getPrimaryKeyColumns(tableName: string): Promise<string[]> {
+        let query = `PRAGMA table_info(${tableName});`;
+
+        if (this.dataSource.source === Source.external) {
+            if (this.env.EXTERNAL_DB_TYPE?.toLowerCase() === "postgres") {
+                query = `SELECT * FROM information_schema.table_constraints WHERE table_name = '${tableName}' AND constraint_type = 'PRIMARY KEY';`;
+            } else if (this.env.EXTERNAL_DB_TYPE?.toLowerCase() === "mysql") {
+                query = `SELECT COLUMN_NAME FROM information_schema.key_column_usage 
+                        WHERE table_name = '${tableName}' 
+                        AND constraint_name = 'PRIMARY'
+                        AND table_schema = DATABASE();`;
+            }
+        }
+
+        const schemaInfo = (await executeQuery(query, [], false, this.dataSource)) as any[];
         const pkColumns = schemaInfo
             .filter(col => typeof col.pk === 'number' && col.pk > 0 && col.name !== null)
             .map(col => col.name as string);
@@ -111,13 +118,8 @@ export class LiteREST {
      * @param queries - The operations to execute.
      */
     private async executeOperation(queries: { sql: string, params: any[] }[]): Promise<{ result?: any, error?: string | undefined, status: number }> {
-        return await enqueueOperation(
-            queries,
-            false,
-            false,
-            this.operationQueue,
-            () => processNextOperation(this.sql, this.operationQueue, this.state, this.processingOperation)
-        );
+        const results: any[] = (await executeTransaction(queries, false, this.dataSource)) as any[];
+        return { result: results?.length > 0 ? results[0] : undefined, status: 200 };
     }
 
     /**
@@ -176,11 +178,13 @@ export class LiteREST {
         };
     }
 
-    private buildSelectQuery(tableName: string, id: string | undefined, searchParams: URLSearchParams): { query: string, params: any[] } {
+    private async buildSelectQuery(tableName: string, id: string | undefined, searchParams: URLSearchParams): Promise<{ query: string, params: any[] }> {
+        console.log('Building SELECT Query');
+
         let query = `SELECT * FROM ${tableName}`;
         const params: any[] = [];
         const conditions: string[] = [];
-        const pkColumns = this.getPrimaryKeyColumns(tableName);
+        const pkColumns = await this.getPrimaryKeyColumns(tableName);
         const { conditions: pkConditions, params: pkParams, error } = this.getPrimaryKeyConditions(pkColumns, id, {}, searchParams);
     
         if (!error) {
@@ -248,7 +252,7 @@ export class LiteREST {
     }
 
     private async handleGet(tableName: string, id: string | undefined, searchParams: URLSearchParams): Promise<Response> {
-        const { query, params } = this.buildSelectQuery(tableName, id, searchParams);
+        const { query, params } = await this.buildSelectQuery(tableName, id, searchParams);
 
         try {
             const response = await this.executeOperation([{ sql: query, params }]);
@@ -282,14 +286,7 @@ export class LiteREST {
         const queries = [{ sql: query, params }];
 
         try {
-            await enqueueOperation(
-                queries,
-                false, // isTransaction
-                false, // isRaw
-                this.operationQueue,
-                () => processNextOperation(this.sql, this.operationQueue, this.state, this.processingOperation)
-            );
-    
+            await this.executeOperation(queries);
             return createResponse({ message: 'Resource created successfully', data }, undefined, 201);
         } catch (error: any) {
             console.error('POST Operation Error:', error);
@@ -299,7 +296,7 @@ export class LiteREST {
     }
 
     private async handlePatch(tableName: string, id: string | undefined, data: any): Promise<Response> {
-        const pkColumns = this.getPrimaryKeyColumns(tableName);
+        const pkColumns = await this.getPrimaryKeyColumns(tableName);
 
         const { conditions: pkConditions, params: pkParams, error } = this.getPrimaryKeyConditions(pkColumns, id, data, new URLSearchParams());
 
@@ -339,14 +336,7 @@ export class LiteREST {
         const queries = [{ sql: query, params }];
 
         try {
-            await enqueueOperation(
-                queries,
-                false,
-                false,
-                this.operationQueue,
-                () => processNextOperation(this.sql, this.operationQueue, this.state, this.processingOperation)
-            );
-
+            await this.executeOperation(queries);
             return createResponse({ message: 'Resource updated successfully', data }, undefined, 200);
         } catch (error: any) {
             console.error('PATCH Operation Error:', error);
@@ -355,7 +345,7 @@ export class LiteREST {
     }
     
     private async handlePut(tableName: string, id: string | undefined, data: any): Promise<Response> {
-        const pkColumns = this.getPrimaryKeyColumns(tableName);
+        const pkColumns = await this.getPrimaryKeyColumns(tableName);
 
         const { conditions: pkConditions, params: pkParams, error } = this.getPrimaryKeyConditions(pkColumns, id, data, new URLSearchParams());
 
@@ -387,14 +377,7 @@ export class LiteREST {
         const queries = [{ sql: query, params }];
 
         try {
-            await enqueueOperation(
-                queries,
-                false,
-                false,
-                this.operationQueue,
-                () => processNextOperation(this.sql, this.operationQueue, this.state, this.processingOperation)
-            );
-
+            await this.executeOperation(queries);
             return createResponse({ message: 'Resource replaced successfully', data }, undefined, 200);
         } catch (error: any) {
             console.error('PUT Operation Error:', error);
@@ -403,7 +386,7 @@ export class LiteREST {
     }
 
     private async handleDelete(tableName: string, id: string | undefined): Promise<Response> {
-        const pkColumns = this.getPrimaryKeyColumns(tableName);
+        const pkColumns = await this.getPrimaryKeyColumns(tableName);
 
         const { conditions: pkConditions, params: pkParams, error } = this.getPrimaryKeyConditions(pkColumns, id, {}, new URLSearchParams());
 
@@ -416,14 +399,7 @@ export class LiteREST {
         const queries = [{ sql: query, params: pkParams }];
 
         try {
-            await enqueueOperation(
-                queries,
-                false,
-                false,
-                this.operationQueue,
-                () => processNextOperation(this.sql, this.operationQueue, this.state, this.processingOperation)
-            );
-            
+            await this.executeOperation(queries);
             return createResponse({ message: 'Resource deleted successfully' }, undefined, 200);
         } catch (error: any) {
             console.error('DELETE Operation Error:', error);

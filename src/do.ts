@@ -1,6 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
 import { OperationQueueItem, QueryResponse } from "./operation";
-import { createResponse, QueryRequest, QueryTransactionRequest } from "./utils";
 
 export class DatabaseDurableObject extends DurableObject {
     // Durable storage for the SQL database
