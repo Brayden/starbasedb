@@ -111,6 +111,7 @@ export default {
                 durableObject: stub as unknown as DatabaseStub,
             },
             externalConnection: {
+                // TODO: Should the API key instead live in the `wrangler.toml` file instead of request headers?
                 outerbaseApiKey: request.headers.get('X-Outerbase-Source-Token') ?? url.searchParams.get('outerbaseApiKey') ?? '',
             },
         };

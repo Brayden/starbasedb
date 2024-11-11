@@ -1,9 +1,15 @@
-import { DataSource } from ".";
+import { DataSource, Source } from ".";
 import { LiteREST } from "./literest";
 import { executeQuery, executeTransaction } from "./operation";
 import { createResponse, QueryRequest, QueryTransactionRequest } from "./utils";
 import { Env } from './'
 import { handleApiRequest } from "./api";
+import { dumpDatabaseRoute } from "./export/dump";
+import { exportTableToJsonRoute } from "./export/json";
+import { exportTableToCsvRoute } from "./export/csv";
+import { importDumpRoute } from "./import/dump";
+import { importTableFromJsonRoute } from "./import/json";
+import { importTableFromCsvRoute } from "./import/csv";
 
 export class Handler {
     private liteREST?: LiteREST;
@@ -24,35 +30,58 @@ export class Handler {
             return this.clientConnected();
         } else if (url.pathname.startsWith('/rest')) {
             return await this.liteREST.handleRequest(request);
-        
-        // else if (request.method === 'GET' && url.pathname === '/export/dump') {
-        //     return dumpDatabaseRoute(this.sql, this.operationQueue, this.ctx, this.processingOperation);
-        // } else if (request.method === 'GET' && url.pathname.startsWith('/export/json/')) {
-        //     const tableName = url.pathname.split('/').pop();
-        //     if (!tableName) {
-        //         return createResponse(undefined, 'Table name is required', 400);
-        //     }
-        //     return exportTableToJsonRoute(this.sql, this.operationQueue, this.ctx, this.processingOperation, tableName);
-        // } else if (request.method === 'GET' && url.pathname.startsWith('/export/csv/')) {
-        //     const tableName = url.pathname.split('/').pop();
-        //     if (!tableName) {
-        //         return createResponse(undefined, 'Table name is required', 400);
-        //     }
-        //     return exportTableToCsvRoute(this.sql, this.operationQueue, this.ctx, this.processingOperation, tableName);
-        // } else if (request.method === 'POST' && url.pathname === '/import/dump') {
-        //     return importDumpRoute(request, this.sql, this.operationQueue, this.ctx, this.processingOperation);
-        // } else if (request.method === 'POST' && url.pathname.startsWith('/import/json/')) {
-        //     const tableName = url.pathname.split('/').pop();
-        //     if (!tableName) {
-        //         return createResponse(undefined, 'Table name is required', 400);
-        //     }
-        //     return importTableFromJsonRoute(this.sql, this.operationQueue, this.ctx, this.processingOperation, tableName, request);
-        // } else if (request.method === 'POST' && url.pathname.startsWith('/import/csv/')) {
-        //     const tableName = url.pathname.split('/').pop();
-        //     if (!tableName) {
-        //         return createResponse(undefined, 'Table name is required', 400);
-        //     }
-        //     return importTableFromCsvRoute(this.sql, this.operationQueue, this.ctx, this.processingOperation, tableName, request);
+        } else if (request.method === 'GET' && url.pathname === '/export/dump') {
+            if (this.dataSource.source === Source.external) {
+                return createResponse(undefined, 'Function is only available for internal data source.', 400);
+            }
+
+            return dumpDatabaseRoute(this.dataSource);
+        } else if (request.method === 'GET' && url.pathname.startsWith('/export/json/')) {
+            if (this.dataSource.source === Source.external) {
+                return createResponse(undefined, 'Function is only available for internal data source.', 400);
+            }
+
+            const tableName = url.pathname.split('/').pop();
+            if (!tableName) {
+                return createResponse(undefined, 'Table name is required', 400);
+            }
+            return exportTableToJsonRoute(tableName, this.dataSource);
+        } else if (request.method === 'GET' && url.pathname.startsWith('/export/csv/')) {
+            if (this.dataSource.source === Source.external) {
+                return createResponse(undefined, 'Function is only available for internal data source.', 400);
+            }
+
+            const tableName = url.pathname.split('/').pop();
+            if (!tableName) {
+                return createResponse(undefined, 'Table name is required', 400);
+            }
+            return exportTableToCsvRoute(tableName, this.dataSource);
+        } else if (request.method === 'POST' && url.pathname === '/import/dump') {
+            if (this.dataSource.source === Source.external) {
+                return createResponse(undefined, 'Function is only available for internal data source.', 400);
+            }
+
+            return importDumpRoute(request, this.dataSource);
+        } else if (request.method === 'POST' && url.pathname.startsWith('/import/json/')) {
+            if (this.dataSource.source === Source.external) {
+                return createResponse(undefined, 'Function is only available for internal data source.', 400);
+            }
+
+            const tableName = url.pathname.split('/').pop();
+            if (!tableName) {
+                return createResponse(undefined, 'Table name is required', 400);
+            }
+            return importTableFromJsonRoute(tableName, request, this.dataSource);
+        } else if (request.method === 'POST' && url.pathname.startsWith('/import/csv/')) {
+            if (this.dataSource.source === Source.external) {
+                return createResponse(undefined, 'Function is only available for internal data source.', 400);
+            }
+            
+            const tableName = url.pathname.split('/').pop();
+            if (!tableName) {
+                return createResponse(undefined, 'Table name is required', 400);
+            }
+            return importTableFromCsvRoute(tableName, request, this.dataSource);
         } else if (url.pathname.startsWith('/api')) {
             return await handleApiRequest(request);
         }

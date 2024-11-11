@@ -224,7 +224,7 @@ You can request a `database_dump.sql` file that exports your database schema and
 <pre>
 <code>
 curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/dump' \
---header 'Authorization: Bearer ABC123' 
+--header 'Authorization: Bearer ABC123' \
 --output database_dump.sql
 </code>
 </pre>
@@ -232,9 +232,8 @@ curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/dump' \
 <h3>JSON Data Export</h3>
 <pre>
 <code>
-curl
---location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/json/users' \
---header 'Authorization: Bearer ABC123'
+curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/json/users' \
+--header 'Authorization: Bearer ABC123' \
 --output output.json
 </code>
 </pre>
@@ -242,9 +241,8 @@ curl
 <h3>CSV Data Export</h3>
 <pre>
 <code>
-curl
---location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/csv/users' \
---header 'Authorization: Bearer ABC123'
+curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/csv/users' \
+--header 'Authorization: Bearer ABC123' \
 --output output.csv
 </code>
 </pre>
@@ -252,8 +250,7 @@ curl
 <h3>SQL Import</h3>
 <pre>
 <code>
-curl 
---location 'https://starbasedb.YOUR-ID-HERE.workers.dev/import/dump' \
+curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/import/dump' \
 --header 'Authorization: Bearer ABC123' \
 --form 'sqlFile=@"./Desktop/sqldump.sql"'
 </code>
