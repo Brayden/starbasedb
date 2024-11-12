@@ -19,6 +19,12 @@ export type RawQueryResponse = {
 
 export type QueryResponse = any[] | RawQueryResponse;
 
+async function afterQuery(sql: string, result: any, isRaw: boolean, dataSource?: DataSource): Promise<any> {
+    // ## DO NOT REMOVE: TEMPLATE AFTER QUERY HOOK ##
+
+    return result;
+}
+
 export async function executeQuery(sql: string, params: any | undefined, isRaw: boolean, dataSource?: DataSource): Promise<QueryResponse> {
     if (!dataSource) {
         console.error('Data source not found.')
@@ -49,7 +55,7 @@ export async function executeQuery(sql: string, params: any | undefined, isRaw: 
 
         let results: any = await response.json();
         let items = results.response.results?.items;
-        return items;
+        return this.afterQuery(sql, items, isRaw, dataSource);
     } 
 }
 
@@ -85,7 +91,8 @@ export async function executeTransaction(queries: { sql: string; params?: any[] 
             });
 
             const result: any = await response.json();
-            results.push(result.response.results?.items);
+            const items = result.response.results?.items;
+            results.push(this.afterQuery(query.sql, items, isRaw, dataSource));
         }
 
         return results;

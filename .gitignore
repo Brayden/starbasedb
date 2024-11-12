@@ -53,6 +53,8 @@ build/Release
 
 node_modules/
 jspm_packages/
+.pnpm-lock.yaml
+\*.package-lock.json
 
 # Snowpack dependency directory (https://snowpack.dev/)
 

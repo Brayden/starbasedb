@@ -9,11 +9,12 @@ const DURABLE_OBJECT_ID = 'sql-durable-object';
 export interface Env {
     AUTHORIZATION_TOKEN: string;
     DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
-
+    REGION: string;
+  
     // Studio credentials
     STUDIO_USER?: string;
     STUDIO_PASS?: string;
-
+  
     // External database source details
     EXTERNAL_DB_TYPE?: string;
     EXTERNAL_DB_HOST?: string;
@@ -21,7 +22,7 @@ export interface Env {
     EXTERNAL_DB_USER?: string;
     EXTERNAL_DB_PASS?: string;
     EXTERNAL_DB_PORT?: string;
-
+  
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
 }
 
@@ -100,8 +101,9 @@ export default {
          * Retrieve the Durable Object identifier from the environment bindings and instantiate a
          * Durable Object stub to interact with the Durable Object.
          */
-        let id: DurableObjectId = env.DATABASE_DURABLE_OBJECT.idFromName(DURABLE_OBJECT_ID);
-		let stub = env.DATABASE_DURABLE_OBJECT.get(id);
+        const region = env.REGION ?? RegionLocationHint.AUTO;
+        const id: DurableObjectId = env.DATABASE_DURABLE_OBJECT.idFromName(DURABLE_OBJECT_ID);
+        const stub = region !== RegionLocationHint.AUTO ? env.DATABASE_DURABLE_OBJECT.get(id, { locationHint: region as DurableObjectLocationHint }) : env.DATABASE_DURABLE_OBJECT.get(id);
 
         const source: Source = request.headers.get('X-Starbase-Source') as Source ?? url.searchParams.get('source') as Source ?? 'internal';
         const dataSource: DataSource = {
