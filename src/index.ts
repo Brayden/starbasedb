@@ -17,6 +17,7 @@ export interface Env {
     AUTHORIZATION_TOKEN: string;
     DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
     REGION: string;
+    JURISDICTION?: Jurisdiction;
     STUDIO_USER?: string;
     STUDIO_PASS?: string;
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
@@ -33,6 +34,11 @@ enum RegionLocationHint {
     OC = 'oc', // Oceania
     AFR = 'afr', // Africa
     ME = 'me', // Middle East
+}
+
+enum Jurisdiction {
+    EU = 'eu',
+    FEDRAMP = 'fedramp'
 }
 
 export class DatabaseDurableObject extends DurableObject<Env> {
@@ -310,19 +316,25 @@ export default {
         }
 
         /**
-         * Retrieve the Durable Object identifier from the environment bindings and instantiate a
-         * Durable Object stub to interact with the Durable Object.
+         * Handle Durable Object creation with jurisdiction or region preferences
          */
-        const region = env.REGION ?? RegionLocationHint.AUTO;
-        const id: DurableObjectId = env.DATABASE_DURABLE_OBJECT.idFromName(DURABLE_OBJECT_ID);
-        const stub = region !== RegionLocationHint.AUTO ? env.DATABASE_DURABLE_OBJECT.get(id, { locationHint: region as DurableObjectLocationHint }) : env.DATABASE_DURABLE_OBJECT.get(id);
+        let id: DurableObjectId;
+        let stub: DurableObjectStub;
 
-        // ## DO NOT REMOVE: TEMPLATE ROUTING ##
+        if (env.JURISDICTION) {
+            // If jurisdiction is specified, it takes precedence over region
+            const namespace = env.DATABASE_DURABLE_OBJECT.jurisdiction(env.JURISDICTION as Jurisdiction);
+            id = namespace.idFromName(DURABLE_OBJECT_ID);
+            stub = namespace.get(id);
+        } else {
+            // Fall back to region-based routing if no jurisdiction is specified
+            id = env.DATABASE_DURABLE_OBJECT.idFromName(DURABLE_OBJECT_ID);
+            const region = env.REGION ?? RegionLocationHint.AUTO;
+            stub = region !== RegionLocationHint.AUTO 
+                ? env.DATABASE_DURABLE_OBJECT.get(id, { locationHint: region as DurableObjectLocationHint })
+                : env.DATABASE_DURABLE_OBJECT.get(id);
+        }
 
-        /**
-         * Pass the fetch request directly to the Durable Object, which will handle the request
-         * and return a response to be sent back to the client.
-         */
         return await stub.fetch(request);
 	},
 } satisfies ExportedHandler<Env>;

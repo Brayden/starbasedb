@@ -28,6 +28,7 @@ new_sqlite_classes = ["DatabaseDurableObject"]
 
 [vars]
 AUTHORIZATION_TOKEN = "ABC123"
+JURISDICTION = "eu" # "eu" or "fedramp"
 REGION = "auto"
 
 # Uncomment the section below to create a user for logging into your database UI.
