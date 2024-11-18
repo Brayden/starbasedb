@@ -55,7 +55,7 @@ export async function executeQuery(sql: string, params: any | undefined, isRaw: 
 
         let results: any = await response.json();
         let items = results.response.results?.items;
-        return this.afterQuery(sql, items, isRaw, dataSource);
+        return afterQuery(sql, items, isRaw, dataSource);
     } 
 }
 
@@ -92,7 +92,7 @@ export async function executeTransaction(queries: { sql: string; params?: any[] 
 
             const result: any = await response.json();
             const items = result.response.results?.items;
-            results.push(this.afterQuery(query.sql, items, isRaw, dataSource));
+            results.push(afterQuery(query.sql, items, isRaw, dataSource));
         }
 
         return results;

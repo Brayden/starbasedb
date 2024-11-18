@@ -179,8 +179,6 @@ export class LiteREST {
     }
 
     private async buildSelectQuery(tableName: string, id: string | undefined, searchParams: URLSearchParams): Promise<{ query: string, params: any[] }> {
-        console.log('Building SELECT Query');
-
         let query = `SELECT * FROM ${tableName}`;
         const params: any[] = [];
         const conditions: string[] = [];

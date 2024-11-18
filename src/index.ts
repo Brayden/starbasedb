@@ -17,11 +17,7 @@ export interface Env {
   
     // External database source details
     EXTERNAL_DB_TYPE?: string;
-    EXTERNAL_DB_HOST?: string;
-    EXTERNAL_DB_NAME?: string;
-    EXTERNAL_DB_USER?: string;
-    EXTERNAL_DB_PASS?: string;
-    EXTERNAL_DB_PORT?: string;
+    OUTERBASE_API_KEY?: string;
   
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
 }
@@ -49,6 +45,19 @@ type DatabaseStub = DurableObjectStub & {
     executeQuery(sql: string, params: any[] | undefined, isRaw: boolean): QueryResponse;
     executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean): any[];
 };
+
+enum RegionLocationHint {
+    AUTO = 'auto',
+    WNAM = 'wnam', // Western North America
+    ENAM = 'enam', // Eastern North America
+    SAM = 'sam', // South America
+    WEUR = 'weur', // Western Europe
+    EEUR = 'eeur', // Eastern Europe
+    APAC = 'apac', // Asia Pacific
+    OC = 'oc', // Oceania
+    AFR = 'afr', // Africa
+    ME = 'me', // Middle East
+}
 
 export default {
 	/**
@@ -113,8 +122,7 @@ export default {
                 durableObject: stub as unknown as DatabaseStub,
             },
             externalConnection: {
-                // TODO: Should the API key instead live in the `wrangler.toml` file instead of request headers?
-                outerbaseApiKey: request.headers.get('X-Outerbase-Source-Token') ?? url.searchParams.get('outerbaseApiKey') ?? '',
+                outerbaseApiKey: env.OUTERBASE_API_KEY ?? ''
             },
         };
 
