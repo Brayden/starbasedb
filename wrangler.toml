@@ -37,5 +37,5 @@ REGION = "auto"
 
 # External database source details
 # This enables Starbase to connect to an external data source
-EXTERNAL_DB_TYPE = "postgres"
-OUTERBASE_API_KEY = ""
+# EXTERNAL_DB_TYPE = "postgres"
+# OUTERBASE_API_KEY = ""

@@ -14,12 +14,14 @@ import { importTableFromCsvRoute } from "./import/csv";
 export class Handler {
     private liteREST?: LiteREST;
     private dataSource?: DataSource;
+    private env?: Env;
 
     constructor() { }
 
     public async handle(request: Request, dataSource: DataSource, env: Env): Promise<Response> {
         this.dataSource = dataSource;
         this.liteREST = new LiteREST(dataSource, env);
+        this.env = env;
         const url = new URL(request.url);
 
         if (request.method === 'POST' && url.pathname === '/query/raw') {
@@ -76,7 +78,7 @@ export class Handler {
             if (this.dataSource.source === Source.external) {
                 return createResponse(undefined, 'Function is only available for internal data source.', 400);
             }
-            
+
             const tableName = url.pathname.split('/').pop();
             if (!tableName) {
                 return createResponse(undefined, 'Table name is required', 400);
@@ -111,7 +113,7 @@ export class Handler {
                     return { sql, params };
                 });
 
-                const response = await executeTransaction(queries, isRaw, this.dataSource);
+                const response = await executeTransaction(queries, isRaw, this.dataSource, this.env);
                 return createResponse(response, undefined, 200);
             } else if (typeof sql !== 'string' || !sql.trim()) {
                 return createResponse(undefined, 'Invalid or empty "sql" field.', 400);
@@ -119,7 +121,7 @@ export class Handler {
                 return createResponse(undefined, 'Invalid "params" field. Must be an array or object.', 400);
             }
 
-            const response = await executeQuery(sql, params, isRaw, this.dataSource);
+            const response = await executeQuery(sql, params, isRaw, this.dataSource, this.env);
             return createResponse(response, undefined, 200);
         } catch (error: any) {
             console.error('Query Route Error:', error);

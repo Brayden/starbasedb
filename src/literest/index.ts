@@ -29,23 +29,34 @@ export class LiteREST {
      * @param tableName - The name of the table.
      * @returns An array of primary key column names.
      */
-    private async getPrimaryKeyColumns(tableName: string): Promise<string[]> {
+    private async getPrimaryKeyColumns(tableName: string, schemaName?: string): Promise<string[]> {
         let query = `PRAGMA table_info(${tableName});`;
-
+    
         if (this.dataSource.source === Source.external) {
             if (this.env.EXTERNAL_DB_TYPE?.toLowerCase() === "postgres") {
-                query = `SELECT * FROM information_schema.table_constraints WHERE table_name = '${tableName}' AND constraint_type = 'PRIMARY KEY';`;
+                query = `
+                    SELECT kcu.column_name AS name 
+                    FROM information_schema.table_constraints tc 
+                    JOIN information_schema.key_column_usage kcu 
+                    ON tc.constraint_name = kcu.constraint_name
+                    AND tc.table_schema = kcu.table_schema 
+                    AND tc.table_name = kcu.table_name 
+                    WHERE tc.constraint_type = 'PRIMARY KEY'
+                    AND tc.table_name = '${tableName}' 
+                    AND tc.table_schema = '${schemaName ?? 'public'}';`;
             } else if (this.env.EXTERNAL_DB_TYPE?.toLowerCase() === "mysql") {
-                query = `SELECT COLUMN_NAME FROM information_schema.key_column_usage 
-                        WHERE table_name = '${tableName}' 
-                        AND constraint_name = 'PRIMARY'
-                        AND table_schema = DATABASE();`;
+                query = `
+                    SELECT COLUMN_NAME AS name FROM information_schema.key_column_usage 
+                    WHERE table_name = '${tableName}' 
+                    AND constraint_name = 'PRIMARY'
+                    AND table_schema = ${schemaName ?? 'DATABASE()'};
+                `;
             }
         }
 
-        const schemaInfo = (await executeQuery(query, [], false, this.dataSource)) as any[];
+        const schemaInfo = (await executeQuery(query, this.dataSource.source === Source.external ? {} : [], false, this.dataSource, this.env)) as any[];
         const pkColumns = schemaInfo
-            .filter(col => typeof col.pk === 'number' && col.pk > 0 && col.name !== null)
+            // .filter(col => typeof col.pk === 'number' && col.pk > 0 && col.name !== null)
             .map(col => col.name as string);
         return pkColumns;
     }
@@ -90,7 +101,7 @@ export class LiteREST {
         const conditions: string[] = [];
         const params: any[] = [];
 
-        if (pkColumns.length === 1) {
+        if (pkColumns?.length === 1) {
             const pk = pkColumns[0];
             const pkValue = id || data[pk] || searchParams.get(pk);
             if (!pkValue) {
@@ -118,7 +129,7 @@ export class LiteREST {
      * @param queries - The operations to execute.
      */
     private async executeOperation(queries: { sql: string, params: any[] }[]): Promise<{ result?: any, error?: string | undefined, status: number }> {
-        const results: any[] = (await executeTransaction(queries, false, this.dataSource)) as any[];
+        const results: any[] = (await executeTransaction(queries, false, this.dataSource, this.env)) as any[];
         return { result: results?.length > 0 ? results[0] : undefined, status: 200 };
     }
 
@@ -128,20 +139,20 @@ export class LiteREST {
      * @returns The response to the request.
      */
     async handleRequest(request: Request): Promise<Response> {
-        const { method, tableName, id, searchParams, body } = await this.parseRequest(request);
+        const { method, tableName, schemaName, id, searchParams, body } = await this.parseRequest(request);
 
         try {
             switch (method) {
                 case 'GET':
-                    return await this.handleGet(tableName, id, searchParams);
+                    return await this.handleGet(tableName, schemaName, id, searchParams);
                 case 'POST':
-                    return await this.handlePost(tableName, body);
+                    return await this.handlePost(tableName, schemaName, body);
                 case 'PATCH':
-                    return await this.handlePatch(tableName, id, body);
+                    return await this.handlePatch(tableName, schemaName, id, body);
                 case 'PUT':
-                    return await this.handlePut(tableName, id, body);
+                    return await this.handlePut(tableName, schemaName, id, body);
                 case 'DELETE':
-                    return await this.handleDelete(tableName, id);
+                    return await this.handleDelete(tableName, schemaName, id);
                 default:
                     return createResponse(undefined, 'Method not allowed', 405);
             }
@@ -156,7 +167,7 @@ export class LiteREST {
      * @param request - The incoming request.
      * @returns An object containing the method, table name, id, search parameters, and body.
      */
-    private async parseRequest(request: Request): Promise<{ method: string, tableName: string, id?: string, searchParams: URLSearchParams, body?: any }> {
+    private async parseRequest(request: Request): Promise<{ method: string, tableName: string, schemaName: string | undefined, id?: string, searchParams: URLSearchParams, body?: any }> {
         const liteRequest = new Request(request.url.replace('/rest', ''), request);
         const url = new URL(liteRequest.url);
         const pathParts = url.pathname.split('/').filter(Boolean);
@@ -165,24 +176,26 @@ export class LiteREST {
             throw new Error('Invalid route');
         }
 
-        const tableName = this.sanitizeIdentifier(pathParts[0]);
-        const id = pathParts[1];
+        const tableName = this.sanitizeIdentifier(pathParts.length === 1 ? pathParts[0] : pathParts[1]);
+        const schemaName = pathParts.length === 1 ? undefined : this.sanitizeIdentifier(pathParts[0])
+        const id = pathParts.length === 1 ? pathParts[1] : pathParts[2];
         const body = ['POST', 'PUT', 'PATCH'].includes(liteRequest.method) ? await liteRequest.json() : undefined;
 
         return {
             method: liteRequest.method,
             tableName,
+            schemaName,
             id,
             searchParams: url.searchParams,
             body
         };
     }
 
-    private async buildSelectQuery(tableName: string, id: string | undefined, searchParams: URLSearchParams): Promise<{ query: string, params: any[] }> {
-        let query = `SELECT * FROM ${tableName}`;
+    private async buildSelectQuery(tableName: string, schemaName: string | undefined, id: string | undefined, searchParams: URLSearchParams): Promise<{ query: string, params: any[] }> {
+        let query = `SELECT * FROM ${schemaName ? `${schemaName}.` : ''}${tableName}`;
         const params: any[] = [];
         const conditions: string[] = [];
-        const pkColumns = await this.getPrimaryKeyColumns(tableName);
+        const pkColumns = await this.getPrimaryKeyColumns(tableName, schemaName);
         const { conditions: pkConditions, params: pkParams, error } = this.getPrimaryKeyConditions(pkColumns, id, {}, searchParams);
     
         if (!error) {
@@ -249,8 +262,8 @@ export class LiteREST {
         return { query, params };
     }
 
-    private async handleGet(tableName: string, id: string | undefined, searchParams: URLSearchParams): Promise<Response> {
-        const { query, params } = await this.buildSelectQuery(tableName, id, searchParams);
+    private async handleGet(tableName: string, schemaName: string | undefined, id: string | undefined, searchParams: URLSearchParams): Promise<Response> {
+        const { query, params } = await this.buildSelectQuery(tableName, schemaName, id, searchParams);
 
         try {
             const response = await this.executeOperation([{ sql: query, params }]);
@@ -262,7 +275,7 @@ export class LiteREST {
         }
     } 
 
-    private async handlePost(tableName: string, data: any): Promise<Response> {
+    private async handlePost(tableName: string, schemaName: string | undefined, data: any): Promise<Response> {
         if (!this.isDataValid(data)) {
             console.error('Invalid data format for POST:', data);
             return createResponse(undefined, 'Invalid data format', 400);
@@ -293,8 +306,8 @@ export class LiteREST {
         }
     }
 
-    private async handlePatch(tableName: string, id: string | undefined, data: any): Promise<Response> {
-        const pkColumns = await this.getPrimaryKeyColumns(tableName);
+    private async handlePatch(tableName: string, schemaName: string | undefined, id: string | undefined, data: any): Promise<Response> {
+        const pkColumns = await this.getPrimaryKeyColumns(tableName, schemaName);
 
         const { conditions: pkConditions, params: pkParams, error } = this.getPrimaryKeyConditions(pkColumns, id, data, new URLSearchParams());
 
@@ -342,8 +355,8 @@ export class LiteREST {
         }
     }
     
-    private async handlePut(tableName: string, id: string | undefined, data: any): Promise<Response> {
-        const pkColumns = await this.getPrimaryKeyColumns(tableName);
+    private async handlePut(tableName: string, schemaName: string | undefined, id: string | undefined, data: any): Promise<Response> {
+        const pkColumns = await this.getPrimaryKeyColumns(tableName, schemaName);
 
         const { conditions: pkConditions, params: pkParams, error } = this.getPrimaryKeyConditions(pkColumns, id, data, new URLSearchParams());
 
@@ -383,8 +396,8 @@ export class LiteREST {
         }
     }
 
-    private async handleDelete(tableName: string, id: string | undefined): Promise<Response> {
-        const pkColumns = await this.getPrimaryKeyColumns(tableName);
+    private async handleDelete(tableName: string, schemaName: string | undefined, id: string | undefined): Promise<Response> {
+        const pkColumns = await this.getPrimaryKeyColumns(tableName, schemaName);
 
         const { conditions: pkConditions, params: pkParams, error } = this.getPrimaryKeyConditions(pkColumns, id, {}, new URLSearchParams());
 

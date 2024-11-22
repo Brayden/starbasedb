@@ -3,7 +3,5 @@
 interface Env {
 	AUTHORIZATION_TOKEN: "ABC123";
 	REGION: "auto";
-	EXTERNAL_DB_TYPE: "postgres";
-	OUTERBASE_API_KEY: "";
 	DATABASE_DURABLE_OBJECT: DurableObjectNamespace<import("./src/index").DatabaseDurableObject>;
 }

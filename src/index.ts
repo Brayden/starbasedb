@@ -123,7 +123,7 @@ export default {
             },
             externalConnection: {
                 outerbaseApiKey: env.OUTERBASE_API_KEY ?? ''
-            },
+            }
         };
 
         const response = await new Handler().handle(request, dataSource, env);
