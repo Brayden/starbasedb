@@ -28,6 +28,7 @@
   <li><strong><a href="https://github.com/Brayden/starbasedb/edit/main/README.md#deploy-a-starbasedb">Database Interface</a></strong> included out of the box deployed with your Cloudflare Worker</li>
   <li><strong><a href="https://starbasedb.hashnode.space/default-guide/import-export/sql-dump">Import & Export Data</a></strong> to import & extract your schema and data into a local `.sql`, `.json` or `.csv` file</li>
   <li><strong><a href="https://github.com/Brayden/starbasedb/pull/26">Bindable Microservices</a></strong> via templates to kickstart development and own the logic (e.g. user authentication)</li>
+  <li><strong><a href="https://starbasedb.hashnode.space/default-guide/introduction/connect-external-database">Connect to External Databases</a></strong> such as Postgres and MySQL and access it with the methods above</li>
   <li><strong>Scale-to-zero Compute</strong> to reduce costs when your database is not in use</li>
 </ul>
 <br />
@@ -224,7 +225,7 @@ You can request a `database_dump.sql` file that exports your database schema and
 <pre>
 <code>
 curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/dump' \
---header 'Authorization: Bearer ABC123' 
+--header 'Authorization: Bearer ABC123' \
 --output database_dump.sql
 </code>
 </pre>
@@ -232,9 +233,8 @@ curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/dump' \
 <h3>JSON Data Export</h3>
 <pre>
 <code>
-curl
---location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/json/users' \
---header 'Authorization: Bearer ABC123'
+curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/json/users' \
+--header 'Authorization: Bearer ABC123' \
 --output output.json
 </code>
 </pre>
@@ -242,9 +242,8 @@ curl
 <h3>CSV Data Export</h3>
 <pre>
 <code>
-curl
---location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/csv/users' \
---header 'Authorization: Bearer ABC123'
+curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/export/csv/users' \
+--header 'Authorization: Bearer ABC123' \
 --output output.csv
 </code>
 </pre>
@@ -252,8 +251,7 @@ curl
 <h3>SQL Import</h3>
 <pre>
 <code>
-curl 
---location 'https://starbasedb.YOUR-ID-HERE.workers.dev/import/dump' \
+curl --location 'https://starbasedb.YOUR-ID-HERE.workers.dev/import/dump' \
 --header 'Authorization: Bearer ABC123' \
 --form 'sqlFile=@"./Desktop/sqldump.sql"'
 </code>

@@ -2,5 +2,6 @@
 
 interface Env {
 	AUTHORIZATION_TOKEN: "ABC123";
+	REGION: "auto";
 	DATABASE_DURABLE_OBJECT: DurableObjectNamespace<import("./src/index").DatabaseDurableObject>;
 }

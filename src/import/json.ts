@@ -1,5 +1,6 @@
 import { createResponse } from '../utils';
-import { enqueueOperation, processNextOperation } from '../operation';
+import { executeOperation } from '../export';
+import { DataSource } from '..';
 
 interface ColumnMapping {
     [key: string]: string;
@@ -11,12 +12,9 @@ interface JsonData {
 }
 
 export async function importTableFromJsonRoute(
-    sql: SqlStorage,
-    operationQueue: any,
-    ctx: any,
-    processingOperation: { value: boolean },
     tableName: string,
-    request: Request
+    request: Request,
+    dataSource: DataSource
 ): Promise<Response> {
     try {
         if (!request.body) {
@@ -62,13 +60,7 @@ export async function importTableFromJsonRoute(
             const statement = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
 
             try {
-                await enqueueOperation(
-                    [{ sql: statement, params: values }],
-                    false,
-                    false,
-                    operationQueue,
-                    () => processNextOperation(sql, operationQueue, ctx, processingOperation)
-                );
+                await executeOperation([{ sql: statement, params: values }], dataSource)
                 successCount++;
             } catch (error: any) {
                 failedStatements.push({

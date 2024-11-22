@@ -1,15 +1,13 @@
 import { getTableData, createExportResponse } from './index';
 import { createResponse } from '../utils';
+import { DataSource } from '..';
 
 export async function exportTableToJsonRoute(
-    sql: any,
-    operationQueue: any,
-    ctx: any,
-    processingOperation: { value: boolean },
-    tableName: string
+    tableName: string,
+    dataSource: DataSource
 ): Promise<Response> {
     try {
-        const data = await getTableData(sql, operationQueue, ctx, processingOperation, tableName);
+        const data = await getTableData(tableName, dataSource);
 
         if (data === null) {
             return createResponse(undefined, `Table '${tableName}' does not exist.`, 404);

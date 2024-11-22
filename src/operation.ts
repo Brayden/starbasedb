@@ -1,5 +1,5 @@
-import { createResponse } from './utils';
-import { Env } from './index';
+import { DataSource } from '.';
+import { Env } from './'
 
 export type OperationQueueItem = {
     queries: { sql: string; params?: any[] }[];
@@ -20,142 +20,97 @@ export type RawQueryResponse = {
 
 export type QueryResponse = any[] | RawQueryResponse;
 
-async function afterQuery(sql: string, result: any, isRaw: boolean, sqlInstance: any, env?: Env): Promise<any> {
+async function afterQuery(sql: string, result: any, isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<any> {
     // ## DO NOT REMOVE: TEMPLATE AFTER QUERY HOOK ##
 
     return result;
 }
 
-export async function executeQuery(sql: string, params: any[] | undefined, isRaw: boolean, sqlInstance: any, env?: Env): Promise<QueryResponse> {
-    try {
-        let cursor;
-        
-        if (params && params.length) {
-            cursor = sqlInstance.exec(sql, ...params);
-        } else {
-            cursor = sqlInstance.exec(sql);
-        }
+function cleanseQuery(sql: string): string {
+    return sql.replaceAll('\n', ' ')
+}
 
-        let result;
+ // NOTE: This is a temporary stop-gap solution to connect to external data sources. Outerbase offers
+ // an API to handle connecting to a large number of database types in a secure manner. However, the
+ // goal here is to optimize on query latency from your data sources by connecting to them directly.
+ // An upcoming update will move the Outerbase SDK to be used in StarbaseDB so this service can connect
+// to those database types without being required to funnel requests through the Outerbase API.
+async function executeExternalQuery(sql: string, params: any, isRaw: boolean, dataSource: DataSource, env?: Env): Promise<any> {
+    if (!dataSource.externalConnection) {
+        throw new Error('External connection not found.');
+    }
 
-        if (isRaw) {
-            result = {
-                columns: cursor.columnNames,
-                rows: cursor.raw().toArray(),
-                meta: {
-                    rows_read: cursor.rowsRead,
-                    rows_written: cursor.rowsWritten,
-                },
-            };        
-        } else {
-            result = cursor.toArray();
-        }
+    // Convert params from array to object if needed
+    let convertedParams = params;
+    if (Array.isArray(params)) {
+        let paramIndex = 0;
+        convertedParams = params.reduce((acc, value, index) => ({
+            ...acc,
+            [`param${index}`]: value
+        }), {});
+        sql = sql.replace(/\?/g, () => `:param${paramIndex++}`);
+    }
 
-        // Apply any post-query transformations prior to returning the result
-        return await afterQuery(sql, result, isRaw, sqlInstance, env);
-    } catch (error) {
-        console.error('SQL Execution Error:', error);
-        throw error;
+    const API_URL = 'https://app.outerbase.com';
+    const response = await fetch(`${API_URL}/api/v1/ezql/raw`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Source-Token': dataSource.externalConnection.outerbaseApiKey,
+        },
+        body: JSON.stringify({
+            query: cleanseQuery(sql),
+            params: convertedParams,
+        }),
+    });
+
+    const results: any = await response.json();
+    const items = results.response.results?.items;
+    return await afterQuery(sql, items, isRaw, dataSource, env);
+}
+
+export async function executeQuery(sql: string, params: any | undefined, isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<QueryResponse> {
+    if (!dataSource) {
+        console.error('Data source not found.')
+        return []
+    }
+
+    if (dataSource.source === 'internal') {
+        const response = await dataSource.internalConnection?.durableObject.executeQuery(sql, params, isRaw);
+        return await afterQuery(sql, response, isRaw, dataSource, env);
+    } else {
+        return executeExternalQuery(sql, params, isRaw, dataSource, env);
     }
 }
 
-export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, sqlInstance: any, ctx: any, env?: Env): Promise<any[]> {
-    return ctx.storage.transactionSync(async () => {
+export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<QueryResponse> {
+    if (!dataSource) {
+        console.error('Data source not found.')
+        return []
+    }
+    
+    if (dataSource.source === 'internal') {
+        const results: any[] = [];
+
+        for (const query of queries) {
+            const result = await dataSource.internalConnection?.durableObject.executeTransaction(queries, isRaw);
+            if (result) {
+                const processedResults = await Promise.all(
+                    result.map(r => afterQuery(query.sql, r, isRaw, dataSource, env))
+                );
+                results.push(...processedResults);
+            }
+        }
+        
+        return results;
+    } else {
         const results = [];
 
-        try {
-            for (const queryObj of queries) {
-                const { sql, params } = queryObj;
-                const result = await executeQuery(sql, params, isRaw, sqlInstance);
-                results.push(result);
-            }
-
-            return results;
-        } catch (error) {
-            console.error('Transaction Execution Error:', error);
-            throw error;
+        for (const query of queries) {
+            const result = await executeExternalQuery(query.sql, query.params, isRaw, dataSource, env);
+            results.push(result);
         }
-    });
-}
-
-export async function enqueueOperation(
-    queries: { sql: string; params?: any[] }[],
-    isTransaction: boolean,
-    isRaw: boolean,
-    operationQueue: any[],
-    processNextOperation: () => Promise<void>
-): Promise<{ result?: any, error?: string | undefined, status: number }> {
-    const MAX_WAIT_TIME = 25000;
-    return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-            reject(createResponse(undefined, 'Operation timed out.', 503));
-        }, MAX_WAIT_TIME);
-
-        operationQueue.push({
-            queries,
-            isTransaction,
-            isRaw,
-            resolve: (value: any) => {
-                clearTimeout(timeout);
-
-                resolve({
-                    result: value,
-                    error: undefined,
-                    status: 200
-                })
-            },
-            reject: (reason?: any) => {
-                clearTimeout(timeout);
-
-                reject({
-                    result: undefined,
-                    error: reason ?? 'Operation failed.',
-                    status: 500
-                })
-            }
-        });
-
-        processNextOperation().catch((err) => {
-            console.error('Error processing operation queue:', err);
-        });
-    });
-}
-
-export async function processNextOperation(
-    sqlInstance: any,
-    operationQueue: OperationQueueItem[],
-    ctx: any,
-    processingOperation: { value: boolean },
-    env: Env
-) {
-    if (processingOperation.value) {
-        // Already processing an operation
-        return;
-    }
-
-    if (operationQueue.length === 0) {
-        // No operations remaining to process
-        return;
-    }
-
-    processingOperation.value = true;
-    const { queries, isTransaction, isRaw, resolve, reject } = operationQueue.shift()!;
-
-    try {
-        let result;
-
-        if (isTransaction) {
-            result = await executeTransaction(queries, isRaw, sqlInstance, ctx, env);
-        } else {
-            const { sql, params } = queries[0];
-            result = await executeQuery(sql, params, isRaw, sqlInstance, env);
-        }
-
-        resolve(result);
-    } catch (error: any) {
-        reject(error.message || 'Operation failed.');
-    } finally {
-        processingOperation.value = false;
-        await processNextOperation(sqlInstance, operationQueue, ctx, processingOperation, env);
+        
+        return results;
     }
 }

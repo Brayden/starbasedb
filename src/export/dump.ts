@@ -1,51 +1,31 @@
-import { enqueueOperation, processNextOperation } from '../operation';
+import { executeOperation } from '.';
+import { DataSource } from '..';
 import { createResponse } from '../utils';
 
 export async function dumpDatabaseRoute(
-    sql: any,
-    operationQueue: any,
-    ctx: any,
-    processingOperation: { value: boolean }
+    dataSource: DataSource
 ): Promise<Response> {
     try {
         // Get all table names
-        const tablesResult = await enqueueOperation(
-            [{ sql: "SELECT name FROM sqlite_master WHERE type='table';" }],
-            false,
-            false,
-            operationQueue,
-            () => processNextOperation(sql, operationQueue, ctx, processingOperation)
-        );
+        const tablesResult = await executeOperation([{ sql: "SELECT name FROM sqlite_master WHERE type='table';" }], dataSource)
         
-        const tables = tablesResult.result.map((row: any) => row.name);
+        const tables = tablesResult.map((row: any) => row.name);
         let dumpContent = "SQLite format 3\0";  // SQLite file header
 
         // Iterate through all tables
         for (const table of tables) {
             // Get table schema
-            const schemaResult = await enqueueOperation(
-                [{ sql: `SELECT sql FROM sqlite_master WHERE type='table' AND name='${table}';` }],
-                false,
-                false,
-                operationQueue,
-                () => processNextOperation(sql, operationQueue, ctx, processingOperation)
-            );
+            const schemaResult = await executeOperation([{ sql: `SELECT sql FROM sqlite_master WHERE type='table' AND name='${table}';` }], dataSource)
 
-            if (schemaResult.result.length) {
-                const schema = schemaResult.result[0].sql;
+            if (schemaResult.length) {
+                const schema = schemaResult[0].sql;
                 dumpContent += `\n-- Table: ${table}\n${schema};\n\n`;
             }
 
             // Get table data
-            const dataResult = await enqueueOperation(
-                [{ sql: `SELECT * FROM ${table};` }],
-                false,
-                false,
-                operationQueue,
-                () => processNextOperation(sql, operationQueue, ctx, processingOperation)
-            );
+            const dataResult = await executeOperation([{ sql: `SELECT * FROM ${table};` }], dataSource)
 
-            for (const row of dataResult.result) {
+            for (const row of dataResult) {
                 const values = Object.values(row).map(value => 
                     typeof value === 'string' ? `'${value.replace(/'/g, "''")}'` : value
                 );

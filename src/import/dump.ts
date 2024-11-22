@@ -1,5 +1,6 @@
 import { createResponse } from '../utils';
-import { OperationQueueItem } from '../operation';
+import { DataSource } from '..';
+import { executeOperation } from '../export';
 
 function parseSqlStatements(sqlContent: string): string[] {
     const lines = sqlContent.split('\n');
@@ -30,10 +31,7 @@ function parseSqlStatements(sqlContent: string): string[] {
 
 export async function importDumpRoute(
     request: Request,
-    sql: SqlStorage,
-    operationQueue: Array<OperationQueueItem>,
-    ctx: DurableObjectState,
-    processingOperation: { value: boolean }
+    dataSource: DataSource
 ): Promise<Response> {
     if (request.method !== 'POST') {
         return createResponse(undefined, 'Method not allowed', 405);
@@ -68,7 +66,7 @@ export async function importDumpRoute(
         const results = [];
         for (const statement of sqlStatements) {
             try {
-                const result = await sql.exec(statement);
+                const result = await executeOperation([{ sql: statement }], dataSource)
                 results.push({ statement, success: true, result });
             } catch (error: any) {
                 console.error(`Error executing statement: ${statement}`, error);
