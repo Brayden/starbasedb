@@ -55,9 +55,7 @@ export class LiteREST {
         }
 
         const schemaInfo = (await executeQuery(query, this.dataSource.source === Source.external ? {} : [], false, this.dataSource, this.env)) as any[];
-        const pkColumns = schemaInfo
-            // .filter(col => typeof col.pk === 'number' && col.pk > 0 && col.name !== null)
-            .map(col => col.name as string);
+        const pkColumns = schemaInfo.map(col => col.name as string);
         return pkColumns;
     }
 
@@ -290,7 +288,7 @@ export class LiteREST {
         // Sanitize column names
         const columns = dataKeys.map(col => this.sanitizeIdentifier(col));
         const placeholders = columns.map(() => '?').join(', ');
-        const query = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
+        const query = `INSERT INTO ${schemaName ? `${schemaName}.` : ''}${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
 
         // Map parameters using original data keys to get correct values
         const params = dataKeys.map(key => data[key]);
@@ -338,7 +336,7 @@ export class LiteREST {
         // Sanitize column names
         const columns = updateKeys.map(col => this.sanitizeIdentifier(col));
         const setClause = columns.map(col => `${col} = ?`).join(', ');
-        const query = `UPDATE ${tableName} SET ${setClause} WHERE ${pkConditions.join(' AND ')}`;
+        const query = `UPDATE ${schemaName ? `${schemaName}.` : ''}${tableName} SET ${setClause} WHERE ${pkConditions.join(' AND ')}`;
 
         // Map parameters using original data keys to get correct values
         const params = updateKeys.map(key => data[key]);
@@ -379,7 +377,7 @@ export class LiteREST {
         // Sanitize column names
         const columns = dataKeys.map(col => this.sanitizeIdentifier(col));
         const setClause = columns.map(col => `${col} = ?`).join(', ');
-        const query = `UPDATE ${tableName} SET ${setClause} WHERE ${pkConditions.join(' AND ')}`;
+        const query = `UPDATE ${schemaName ? `${schemaName}.` : ''}${tableName} SET ${setClause} WHERE ${pkConditions.join(' AND ')}`;
 
         // Map parameters using original data keys to get correct values
         const params = dataKeys.map(key => data[key]);
@@ -406,7 +404,7 @@ export class LiteREST {
             return createResponse(undefined, error, 400);
         }
 
-        const query = `DELETE FROM ${tableName} WHERE ${pkConditions.join(' AND ')}`;
+        const query = `DELETE FROM ${schemaName ? `${schemaName}.` : ''}${tableName} WHERE ${pkConditions.join(' AND ')}`;
         const queries = [{ sql: query, params: pkParams }];
 
         try {

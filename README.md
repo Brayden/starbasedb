@@ -28,6 +28,7 @@
   <li><strong><a href="https://github.com/Brayden/starbasedb/edit/main/README.md#deploy-a-starbasedb">Database Interface</a></strong> included out of the box deployed with your Cloudflare Worker</li>
   <li><strong><a href="https://starbasedb.hashnode.space/default-guide/import-export/sql-dump">Import & Export Data</a></strong> to import & extract your schema and data into a local `.sql`, `.json` or `.csv` file</li>
   <li><strong><a href="https://github.com/Brayden/starbasedb/pull/26">Bindable Microservices</a></strong> via templates to kickstart development and own the logic (e.g. user authentication)</li>
+  <li><strong><a href="https://starbasedb.hashnode.space/default-guide/introduction/connect-external-database">Connect to External Databases</a></strong> such as Postgres and MySQL and access it with the methods above</li>
   <li><strong>Scale-to-zero Compute</strong> to reduce costs when your database is not in use</li>
 </ul>
 <br />
