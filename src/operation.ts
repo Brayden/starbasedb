@@ -4,7 +4,7 @@ import { createConnection as createMySqlConnection } from 'mysql2';
 import { createClient as createTursoConnection } from '@libsql/client';
 
 // Import how we interact with the databases through the Outerbase SDK
-import { CloudflareD1Connection, DuckDBConnection, MongoDBConnection, MySQLConnection, PostgreSQLConnection, StarbaseConnection, TursoConnection } from '@outerbase/sdk';
+import { CloudflareD1Connection, MongoDBConnection, MySQLConnection, PostgreSQLConnection, StarbaseConnection, TursoConnection } from '@outerbase/sdk';
 import { DataSource } from '.';
 import { Env } from './'
 import { MongoClient } from 'mongodb';
@@ -35,7 +35,7 @@ export type ConnectionDetails = {
 
 async function afterQuery(sql: string, result: any, isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<any> {
     // ## DO NOT REMOVE: TEMPLATE AFTER QUERY HOOK ##
-
+    
     return result;
 }
 
@@ -43,11 +43,10 @@ function cleanseQuery(sql: string): string {
     return sql.replaceAll('\n', ' ')
 }
 
- // NOTE: This is a temporary stop-gap solution to connect to external data sources. Outerbase offers
- // an API to handle connecting to a large number of database types in a secure manner. However, the
- // goal here is to optimize on query latency from your data sources by connecting to them directly.
- // An upcoming update will move the Outerbase SDK to be used in StarbaseDB so this service can connect
-// to those database types without being required to funnel requests through the Outerbase API.
+// Outerbase API supports more data sources than can be supported via Cloudflare Workers. For those data
+// sources we recommend you connect your database to Outerbase and provide the bases API key for queries
+// to be made. Otherwise, for supported data sources such as Postgres, MySQL, D1, StarbaseDB, Turso and Mongo
+// we can connect to the database directly and remove the additional hop to the Outerbase API.
 async function executeExternalQuery(sql: string, params: any, isRaw: boolean, dataSource: DataSource, env?: Env): Promise<any> {
     if (!dataSource.externalConnection) {
         throw new Error('External connection not found.');
@@ -92,9 +91,13 @@ export async function executeQuery(sql: string, params: any | undefined, isRaw: 
         const response = await dataSource.internalConnection?.durableObject.executeQuery(sql, params, isRaw);
         return await afterQuery(sql, response, isRaw, dataSource, env);
     } else {
-        // TODO: For testing purposes at the moment
+        // If an Outerbase API key is present, external requests route through the Outerbase API
+        if (env?.OUTERBASE_API_KEY) {
+            return executeExternalQuery(sql, params, isRaw, dataSource, env);
+        }
+
+        // Fallback to determining which SDK library to use to query the database via native drivers.
         return executeSDKQuery(sql, params, isRaw, dataSource, env);
-        // return executeExternalQuery(sql, params, isRaw, dataSource, env);
     }
 }
 
@@ -243,5 +246,5 @@ export async function executeSDKQuery(sql: string, params: any | undefined, isRa
     await db.connect();
     const { data } = await db.raw(sql, params);
     
-    return data
+    return await afterQuery(sql, data, isRaw, dataSource, env);
 }
