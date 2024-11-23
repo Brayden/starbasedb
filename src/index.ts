@@ -16,8 +16,23 @@ export interface Env {
     STUDIO_PASS?: string;
   
     // External database source details
-    EXTERNAL_DB_TYPE?: string;
     OUTERBASE_API_KEY?: string;
+    EXTERNAL_DB_TYPE?: string;
+    EXTERNAL_DB_HOST?: string;
+    EXTERNAL_DB_PORT?: number;
+    EXTERNAL_DB_USER?: string;
+    EXTERNAL_DB_PASS?: string;
+    EXTERNAL_DB_DATABASE?: string;
+    EXTERNAL_DB_DEFAULT_SCHEMA?: string;
+
+    // MongoDB specific
+    EXTERNAL_DB_MONGODB_URI?: string;
+    EXTERNAL_DB_TURSO_URI?: string;
+    EXTERNAL_DB_STARBASEDB_URI?: string;
+    EXTERNAL_DB_STARBASEDB_TOKEN?: string;
+    EXTERNAL_DB_CLOUDFLARE_API_KEY?: string;
+    EXTERNAL_DB_CLOUDFLARE_ACCOUNT_ID?: string;
+    EXTERNAL_DB_CLOUDFLARE_DATABASE_ID?: string;
   
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
 }

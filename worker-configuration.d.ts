@@ -3,5 +3,12 @@
 interface Env {
 	AUTHORIZATION_TOKEN: "ABC123";
 	REGION: "auto";
+	EXTERNAL_DB_TYPE: "postgres";
+	EXTERNAL_DB_HOST: "";
+	EXTERNAL_DB_PORT: 0;
+	EXTERNAL_DB_USER: "";
+	EXTERNAL_DB_PASS: "";
+	EXTERNAL_DB_DATABASE: "";
+	EXTERNAL_DB_DEFAULT_SCHEMA: "public";
 	DATABASE_DURABLE_OBJECT: DurableObjectNamespace<import("./src/index").DatabaseDurableObject>;
 }
