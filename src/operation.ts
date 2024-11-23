@@ -69,6 +69,68 @@ async function executeExternalQuery(sql: string, params: any, isRaw: boolean, da
     return await afterQuery(sql, items, isRaw, dataSource, env);
 }
 
+async function executeTursoQuery(sql: string, params: any, isRaw: boolean, dataSource: DataSource, env?: Env): Promise<any> {
+    if (!dataSource.externalConnection || !env?.TURSO_DB_URL) {
+        throw new Error('External connection not found.');
+    }
+
+    const response = await fetch(`${env.TURSO_DB_URL}/v2/pipeline`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${dataSource.externalConnection.tursoApiKey}`,
+        },
+        body: JSON.stringify({
+            requests: [
+              {
+                type: "execute",
+                stmt: {
+                  sql: sql,
+                  args: [] // TODO parameter binding, turso expects {type, value} https://docs.turso.tech/sdk/http/reference#parameter-binding
+                }
+              },
+              {
+                type: "close" // persistent connects not yet supported, could add if requested or needed
+              }
+            ]
+        }),
+    });
+
+    const results: {
+        results: {
+            type: string,
+            response: {
+                type: string,
+                result: {
+                    rows: {
+                        type: string,
+                        value: string
+                    }[][],
+                    cols:{
+                        name: string,
+                        decltype: unknown
+                    }[]
+                }
+            }
+        }[]
+    } = await response.json();
+
+    // Convert columns to rows, turso doesn't have columnNames like DO cursor
+    const columnNames: string[] = results.results[0]?.response.result.cols.map(col => col.name);
+    const items = results.results[0]?.response.result.rows.map(row => {
+      const rowObject: Record<string, unknown> = {};
+
+      for (const [index, colName] of columnNames.entries()) {
+        const cell = row[index];
+        rowObject[colName] = cell.type === 'null' ? null :
+          (cell.type === 'integer' ? parseInt(cell.value) : cell.value);
+      }
+      return rowObject;
+    });
+
+    return await afterQuery(sql, items, isRaw, dataSource, env);
+}
+
 export async function executeQuery(sql: string, params: any | undefined, isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<QueryResponse> {
     if (!dataSource) {
         console.error('Data source not found.')
@@ -78,6 +140,8 @@ export async function executeQuery(sql: string, params: any | undefined, isRaw: 
     if (dataSource.source === 'internal') {
         const response = await dataSource.internalConnection?.durableObject.executeQuery(sql, params, isRaw);
         return await afterQuery(sql, response, isRaw, dataSource, env);
+    } else if (env && env.EXTERNAL_DB_TYPE && env.EXTERNAL_DB_TYPE === "turso") {
+        return executeTursoQuery(sql, params, isRaw, dataSource, env);
     } else {
         return executeExternalQuery(sql, params, isRaw, dataSource, env);
     }
@@ -88,7 +152,7 @@ export async function executeTransaction(queries: { sql: string; params?: any[] 
         console.error('Data source not found.')
         return []
     }
-    
+
     if (dataSource.source === 'internal') {
         const results: any[] = [];
 
@@ -101,7 +165,16 @@ export async function executeTransaction(queries: { sql: string; params?: any[] 
                 results.push(...processedResults);
             }
         }
-        
+
+        return results;
+    } else if (env && env.EXTERNAL_DB_TYPE && env.EXTERNAL_DB_TYPE === "turso") {
+        const results = [];
+
+        for (const query of queries) {
+            const result = await executeTursoQuery(query.sql, query.params, isRaw, dataSource, env);
+            results.push(result);
+        }
+
         return results;
     } else {
         const results = [];
@@ -110,7 +183,7 @@ export async function executeTransaction(queries: { sql: string; params?: any[] 
             const result = await executeExternalQuery(query.sql, query.params, isRaw, dataSource, env);
             results.push(result);
         }
-        
+
         return results;
     }
 }

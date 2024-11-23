@@ -23,7 +23,6 @@ export class Handler {
         this.liteREST = new LiteREST(dataSource, env);
         this.env = env;
         const url = new URL(request.url);
-
         if (request.method === 'POST' && url.pathname === '/query/raw') {
             return this.queryRoute(request, true);
         } else if (request.method === 'POST' && url.pathname === '/query') {
@@ -97,7 +96,7 @@ export class Handler {
             if (!contentType.includes('application/json')) {
                 return createResponse(undefined, 'Content-Type must be application/json.', 400);
             }
-    
+
             const { sql, params, transaction } = await request.json() as QueryRequest & QueryTransactionRequest;
 
             if (Array.isArray(transaction) && transaction.length) {

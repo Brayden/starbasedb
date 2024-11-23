@@ -2,7 +2,7 @@ import { createResponse } from './utils';
 import handleStudioRequest from "./studio";
 import { Handler } from "./handler";
 import { QueryResponse } from "./operation";
-export { DatabaseDurableObject } from './do'; 
+export { DatabaseDurableObject } from './do';
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
@@ -10,15 +10,17 @@ export interface Env {
     AUTHORIZATION_TOKEN: string;
     DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
     REGION: string;
-  
+
     // Studio credentials
     STUDIO_USER?: string;
     STUDIO_PASS?: string;
-  
+
     // External database source details
     EXTERNAL_DB_TYPE?: string;
     OUTERBASE_API_KEY?: string;
-  
+    TURSO_API_KEY?: string;
+    TURSO_DB_URL?: string;
+
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
 }
 
@@ -33,6 +35,7 @@ export type DataSource = {
     internalConnection?: InternalConnection;
     externalConnection?: {
         outerbaseApiKey: string;
+        tursoApiKey: string;
     };
 }
 
@@ -82,7 +85,7 @@ export default {
         if (env.STUDIO_USER && env.STUDIO_PASS && request.method === 'GET' && pathname === '/studio') {
             return handleStudioRequest(request, {
                 username: env.STUDIO_USER,
-                password: env.STUDIO_PASS, 
+                password: env.STUDIO_PASS,
                 apiToken: env.AUTHORIZATION_TOKEN
             });
         }
@@ -115,6 +118,7 @@ export default {
         const stub = region !== RegionLocationHint.AUTO ? env.DATABASE_DURABLE_OBJECT.get(id, { locationHint: region as DurableObjectLocationHint }) : env.DATABASE_DURABLE_OBJECT.get(id);
 
         const source: Source = request.headers.get('X-Starbase-Source') as Source ?? url.searchParams.get('source') as Source ?? 'internal';
+
         const dataSource: DataSource = {
             source: source,
             request: request.clone(),
@@ -122,7 +126,8 @@ export default {
                 durableObject: stub as unknown as DatabaseStub,
             },
             externalConnection: {
-                outerbaseApiKey: env.OUTERBASE_API_KEY ?? ''
+                outerbaseApiKey: env.OUTERBASE_API_KEY ?? '',
+                tursoApiKey: env.TURSO_API_KEY ?? ''
             }
         };
 

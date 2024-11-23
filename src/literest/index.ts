@@ -30,24 +30,24 @@ export class LiteREST {
      * @returns An array of primary key column names.
      */
     private async getPrimaryKeyColumns(tableName: string, schemaName?: string): Promise<string[]> {
-        let query = `PRAGMA table_info(${tableName});`;
-    
+        let query = `SELECT * FROM pragma_table_info('${tableName}') WHERE pk = 1`;
+
         if (this.dataSource.source === Source.external) {
             if (this.env.EXTERNAL_DB_TYPE?.toLowerCase() === "postgres") {
                 query = `
-                    SELECT kcu.column_name AS name 
-                    FROM information_schema.table_constraints tc 
-                    JOIN information_schema.key_column_usage kcu 
+                    SELECT kcu.column_name AS name
+                    FROM information_schema.table_constraints tc
+                    JOIN information_schema.key_column_usage kcu
                     ON tc.constraint_name = kcu.constraint_name
-                    AND tc.table_schema = kcu.table_schema 
-                    AND tc.table_name = kcu.table_name 
+                    AND tc.table_schema = kcu.table_schema
+                    AND tc.table_name = kcu.table_name
                     WHERE tc.constraint_type = 'PRIMARY KEY'
-                    AND tc.table_name = '${tableName}' 
+                    AND tc.table_name = '${tableName}'
                     AND tc.table_schema = '${schemaName ?? 'public'}';`;
             } else if (this.env.EXTERNAL_DB_TYPE?.toLowerCase() === "mysql") {
                 query = `
-                    SELECT COLUMN_NAME AS name FROM information_schema.key_column_usage 
-                    WHERE table_name = '${tableName}' 
+                    SELECT COLUMN_NAME AS name FROM information_schema.key_column_usage
+                    WHERE table_name = '${tableName}'
                     AND constraint_name = 'PRIMARY'
                     AND table_schema = ${schemaName ?? 'DATABASE()'};
                 `;
@@ -195,28 +195,28 @@ export class LiteREST {
         const conditions: string[] = [];
         const pkColumns = await this.getPrimaryKeyColumns(tableName, schemaName);
         const { conditions: pkConditions, params: pkParams, error } = this.getPrimaryKeyConditions(pkColumns, id, {}, searchParams);
-    
+
         if (!error) {
             conditions.push(...pkConditions);
             params.push(...pkParams);
         }
-    
+
         // Extract special parameters
         const sortBy = searchParams.get('sort_by');
         const orderParam = searchParams.get('order');
         const limitParam = searchParams.get('limit');
         const offsetParam = searchParams.get('offset');
-    
+
         // Remove special parameters from searchParams
         ['sort_by', 'order', 'limit', 'offset'].forEach(param => searchParams.delete(param));
-    
+
         // Handle other search parameters
         for (const [key, value] of searchParams.entries()) {
             if (pkColumns.includes(key)) continue; // Skip primary key columns
             const [column, op] = key.split('.');
             const sanitizedColumn = this.sanitizeIdentifier(column);
             const operator = this.sanitizeOperator(op);
-    
+
             if (operator === 'IN') {
                 const values = value.split(',').map(val => val.trim());
                 const placeholders = values.map(() => '?').join(', ');
@@ -227,26 +227,26 @@ export class LiteREST {
                 params.push(value);
             }
         }
-    
+
         // Add WHERE clause if there are conditions
         if (conditions.length > 0) {
             query += ` WHERE ${conditions.join(' AND ')}`;
         }
-    
+
         // Add ORDER BY clause
         if (sortBy) {
             const sanitizedSortBy = this.sanitizeIdentifier(sortBy);
             const order = orderParam?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
             query += ` ORDER BY ${sanitizedSortBy} ${order}`;
         }
-    
+
         // Add LIMIT and OFFSET clauses
         if (limitParam) {
             const limit = parseInt(limitParam, 10);
             if (limit > 0) {
                 query += ` LIMIT ?`;
                 params.push(limit);
-    
+
                 if (offsetParam) {
                     const offset = parseInt(offsetParam, 10);
                     if (offset > 0) {
@@ -256,7 +256,7 @@ export class LiteREST {
                 }
             }
         }
-    
+
         return { query, params };
     }
 
@@ -271,7 +271,7 @@ export class LiteREST {
             console.error('GET Operation Error:', error);
             return createResponse(undefined, error.message || 'Failed to retrieve data', 500);
         }
-    } 
+    }
 
     private async handlePost(tableName: string, schemaName: string | undefined, data: any): Promise<Response> {
         if (!this.isDataValid(data)) {
@@ -352,7 +352,7 @@ export class LiteREST {
             return createResponse(undefined, error.message || 'Failed to update resource', 500);
         }
     }
-    
+
     private async handlePut(tableName: string, schemaName: string | undefined, id: string | undefined, data: any): Promise<Response> {
         const pkColumns = await this.getPrimaryKeyColumns(tableName, schemaName);
 

@@ -31,7 +31,7 @@ export class DatabaseDurableObject extends DurableObject {
      * from other service bindings (e.g. auth). This serves as an exposed function for
      * other service bindings to query the database without having to have knowledge of
      * the current operation queue or processing state.
-     * 
+     *
      * @param sql - The SQL query to execute.
      * @param params - Optional parameters for the SQL query.
      * @returns A response containing the query result or an error message.
@@ -57,7 +57,7 @@ export class DatabaseDurableObject extends DurableObject {
     public executeQuery(sql: string, params: any[] | undefined, isRaw: boolean): QueryResponse {
         try {
             let cursor;
-            
+
             if (params && params.length) {
                 cursor = this.sql.exec(sql, ...params);
             } else {
@@ -74,11 +74,10 @@ export class DatabaseDurableObject extends DurableObject {
                         rows_read: cursor.rowsRead,
                         rows_written: cursor.rowsWritten,
                     },
-                };        
+                };
             } else {
                 result = cursor.toArray();
             }
-
             return result;
         } catch (error) {
             console.error('SQL Execution Error:', error);
