@@ -186,8 +186,8 @@ export class LiteREST {
         }
 
         const tableName = this.sanitizeIdentifier(pathParts.length === 1 ? pathParts[0] : pathParts[1]);
-        const schemaName = this.sanitizeIdentifier(pathParts[0]) //pathParts.length === 1 ? undefined : this.sanitizeIdentifier(pathParts[0])
-        const id = pathParts.length === 3 ? pathParts[2] : undefined; // pathParts.length === 3 ? pathParts[1] : pathParts[2];
+        const schemaName = this.sanitizeIdentifier(pathParts[0]);
+        const id = pathParts.length === 3 ? pathParts[2] : undefined;
         const body = ['POST', 'PUT', 'PATCH'].includes(liteRequest.method) ? await liteRequest.json() : undefined;
 
         return {
@@ -409,7 +409,13 @@ export class LiteREST {
         const pkColumns = await this.getPrimaryKeyColumns(tableName, schemaName);
 
         let data: any = {}
-        data[pkColumns[0]] = id
+
+        // Currently the DELETE only works with single primary key tables.
+        if (pkColumns.length) {
+            const firstPK = pkColumns[0]
+            data[firstPK] = id
+        }
+
         const { conditions: pkConditions, params: pkParams, error } = this.getPrimaryKeyConditions(pkColumns, id, data, new URLSearchParams());
 
         if (error) {
