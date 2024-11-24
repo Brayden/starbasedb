@@ -1,7 +1,7 @@
 // Import the native Node libraries for connecting to various databases
 import { Client as PgClient } from 'pg';
 import { createConnection as createMySqlConnection } from 'mysql2';
-import { createClient as createTursoConnection } from '@libsql/client';
+import { createClient as createTursoConnection } from '@libsql/client/web';
 
 // Import how we interact with the databases through the Outerbase SDK
 import { CloudflareD1Connection, MongoDBConnection, MySQLConnection, PostgreSQLConnection, StarbaseConnection, TursoConnection } from '@outerbase/sdk';
@@ -52,6 +52,11 @@ async function executeExternalQuery(sql: string, params: any, isRaw: boolean, da
         throw new Error('External connection not found.');
     }
 
+    // If not an Outerbase API request, forward to external database.
+    if (!env?.OUTERBASE_API_KEY) {
+        return await executeSDKQuery(sql, params, isRaw, dataSource, env);
+    }
+
     // Convert params from array to object if needed
     let convertedParams = params;
     if (Array.isArray(params)) {
@@ -91,13 +96,7 @@ export async function executeQuery(sql: string, params: any | undefined, isRaw: 
         const response = await dataSource.internalConnection?.durableObject.executeQuery(sql, params, isRaw);
         return await afterQuery(sql, response, isRaw, dataSource, env);
     } else {
-        // If an Outerbase API key is present, external requests route through the Outerbase API
-        if (env?.OUTERBASE_API_KEY) {
-            return executeExternalQuery(sql, params, isRaw, dataSource, env);
-        }
-
-        // Fallback to determining which SDK library to use to query the database via native drivers.
-        return executeSDKQuery(sql, params, isRaw, dataSource, env);
+        return executeExternalQuery(sql, params, isRaw, dataSource, env);
     }
 }
 
@@ -180,9 +179,10 @@ async function createSDKMongoConnection(env: Env): Promise<ConnectionDetails> {
 }
 
 async function createSDKTursoConnection(env: Env): Promise<ConnectionDetails> {
-    const client = new TursoConnection(
-        createTursoConnection({ url: env.EXTERNAL_DB_TURSO_URI || '' })
-    );
+    const client = new TursoConnection(createTursoConnection({ 
+        url: env.EXTERNAL_DB_TURSO_URI || '',
+        authToken: env.EXTERNAL_DB_TURSO_TOKEN || ''
+    }));
 
     return {
         database: client,
@@ -229,7 +229,7 @@ export async function executeSDKQuery(sql: string, params: any | undefined, isRa
     } else if (env?.EXTERNAL_DB_TYPE === 'mysql' && env) {
         const { database } = await createSDKMySQLConnection(env)
         db = database
-    } else if (env?.EXTERNAL_DB_TYPE === 'turso' && env) {
+    } else if (env?.EXTERNAL_DB_TYPE === 'sqlite' && env?.EXTERNAL_DB_TURSO_URI && env) {
         const { database } = await createSDKTursoConnection(env)
         db = database
     } else if (env?.EXTERNAL_DB_TYPE === 'mongo' && env) {

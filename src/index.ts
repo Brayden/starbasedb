@@ -28,6 +28,7 @@ export interface Env {
     // MongoDB specific
     EXTERNAL_DB_MONGODB_URI?: string;
     EXTERNAL_DB_TURSO_URI?: string;
+    EXTERNAL_DB_TURSO_TOKEN?: string;
     EXTERNAL_DB_STARBASEDB_URI?: string;
     EXTERNAL_DB_STARBASEDB_TOKEN?: string;
     EXTERNAL_DB_CLOUDFLARE_API_KEY?: string;

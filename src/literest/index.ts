@@ -54,8 +54,19 @@ export class LiteREST {
             }
         }
 
+        const isSQLite = this.dataSource.source === Source.internal || this.env.EXTERNAL_DB_TYPE?.toLowerCase() === 'sqlite'
         const schemaInfo = (await executeQuery(query, this.dataSource.source === Source.external ? {} : [], false, this.dataSource, this.env)) as any[];
-        const pkColumns = schemaInfo.map(col => col.name as string);
+        
+        let pkColumns = []
+
+        if (isSQLite) {
+            pkColumns = schemaInfo
+                .filter(col => typeof col.pk === 'number' && col.pk > 0 && col.name !== null)
+                .map(col => col.name as string);
+        } else {
+            pkColumns = schemaInfo.map(col => col.name as string);
+        }
+
         return pkColumns;
     }
 
@@ -175,8 +186,8 @@ export class LiteREST {
         }
 
         const tableName = this.sanitizeIdentifier(pathParts.length === 1 ? pathParts[0] : pathParts[1]);
-        const schemaName = pathParts.length === 1 ? undefined : this.sanitizeIdentifier(pathParts[0])
-        const id = pathParts.length === 1 ? pathParts[1] : pathParts[2];
+        const schemaName = this.sanitizeIdentifier(pathParts[0]) //pathParts.length === 1 ? undefined : this.sanitizeIdentifier(pathParts[0])
+        const id = pathParts.length === 3 ? pathParts[2] : undefined; // pathParts.length === 3 ? pathParts[1] : pathParts[2];
         const body = ['POST', 'PUT', 'PATCH'].includes(liteRequest.method) ? await liteRequest.json() : undefined;
 
         return {
@@ -397,7 +408,9 @@ export class LiteREST {
     private async handleDelete(tableName: string, schemaName: string | undefined, id: string | undefined): Promise<Response> {
         const pkColumns = await this.getPrimaryKeyColumns(tableName, schemaName);
 
-        const { conditions: pkConditions, params: pkParams, error } = this.getPrimaryKeyConditions(pkColumns, id, {}, new URLSearchParams());
+        let data: any = {}
+        data[pkColumns[0]] = id
+        const { conditions: pkConditions, params: pkParams, error } = this.getPrimaryKeyConditions(pkColumns, id, data, new URLSearchParams());
 
         if (error) {
             console.error('DELETE Operation Error:', error);
