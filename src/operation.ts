@@ -229,17 +229,17 @@ export async function executeSDKQuery(sql: string, params: any | undefined, isRa
     } else if (env?.EXTERNAL_DB_TYPE === 'mysql' && env) {
         const { database } = await createSDKMySQLConnection(env)
         db = database
-    } else if (env?.EXTERNAL_DB_TYPE === 'sqlite' && env?.EXTERNAL_DB_TURSO_URI && env) {
-        const { database } = await createSDKTursoConnection(env)
-        db = database
     } else if (env?.EXTERNAL_DB_TYPE === 'mongo' && env) {
         const { database } = await createSDKMongoConnection(env)
         db = database
-    } else if (env?.EXTERNAL_DB_TYPE === 'cloudflare' && env) {
+    } else if (env?.EXTERNAL_DB_TYPE === 'sqlite' && env?.EXTERNAL_DB_CLOUDFLARE_API_KEY && env) {
         const { database } = await createSDKCloudflareConnection(env)
         db = database
-    } else if (env?.EXTERNAL_DB_TYPE === 'starbase' && env) {
+    } else if (env?.EXTERNAL_DB_TYPE === 'sqlite' && env?.EXTERNAL_DB_STARBASEDB_URI && env) {
         const { database } = await createSDKStarbaseConnection(env)
+        db = database
+    } else if (env?.EXTERNAL_DB_TYPE === 'sqlite' && env?.EXTERNAL_DB_TURSO_URI && env) {
+        const { database } = await createSDKTursoConnection(env)
         db = database
     }
 
