@@ -174,7 +174,7 @@ async function createSDKMongoConnection(env: Env): Promise<ConnectionDetails> {
 
     return {
         database: client,
-        defaultSchema: env.EXTERNAL_DB_DEFAULT_SCHEMA || 'public'
+        defaultSchema: env.EXTERNAL_DB_DATABASE || ''
     }
 }
 

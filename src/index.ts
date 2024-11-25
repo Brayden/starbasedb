@@ -25,7 +25,6 @@ export interface Env {
     EXTERNAL_DB_DATABASE?: string;
     EXTERNAL_DB_DEFAULT_SCHEMA?: string;
 
-    // MongoDB specific
     EXTERNAL_DB_MONGODB_URI?: string;
     EXTERNAL_DB_TURSO_URI?: string;
     EXTERNAL_DB_TURSO_TOKEN?: string;
