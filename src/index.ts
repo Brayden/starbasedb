@@ -35,6 +35,9 @@ export interface Env {
     EXTERNAL_DB_CLOUDFLARE_DATABASE_ID?: string;
   
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
+    ALLOWLIST: {
+        isQueryAllowed(body: Record<string, any>): Promise<Response>;
+    }
 }
 
 export enum Source {
@@ -87,6 +90,7 @@ export default {
         const url = new URL(request.url);
         const pathname = url.pathname;
         const isWebSocket = request.headers.get("Upgrade") === "websocket";
+        const clonedRequest = request.clone();
 
         /**
          * If the request is a GET request to the /studio endpoint, we can handle the request
@@ -132,7 +136,7 @@ export default {
         const source: Source = request.headers.get('X-Starbase-Source') as Source ?? url.searchParams.get('source') as Source ?? 'internal';
         const dataSource: DataSource = {
             source: source,
-            request: request.clone(),
+            request: clonedRequest,
             internalConnection: {
                 durableObject: stub as unknown as DatabaseStub,
             },
@@ -141,9 +145,18 @@ export default {
             }
         };
 
+        // ## DO NOT REMOVE: PRE-HANDLER HOOKS ##
+        // INSERT CODE HERE IF REQUIRED
+        const isQueryAllowed = await env.ALLOWLIST.isQueryAllowed(clonedRequest.body ? await clonedRequest.json() : {});
+        if (!isQueryAllowed) {
+            return createResponse(undefined, 'Query not allowed', 403);
+        }
+
+        // This is the default request handler, do not modify.
         const response = await new Handler().handle(request, dataSource, env);
 
-        // ## DO NOT REMOVE: TEMPLATE ROUTING ##
+        // ## DO NOT REMOVE: POST-HANDLER HOOKS ##
+        // INSERT CODE HERE IF REQUIRED
 
         return response;
 	},

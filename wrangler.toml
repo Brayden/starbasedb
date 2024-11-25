@@ -7,6 +7,10 @@ compatibility_flags = ["nodejs_compat_v2"]
 
 # Service Bindings
 ## DO NOT REMOVE: TEMPLATE SERVICES ##
+[[services]]
+binding = "ALLOWLIST"
+service = "starbasedb_allowlist_queries"
+entrypoint = "AllowlistQueriesEntrypoint"
 
 # Workers Logs
 # Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
