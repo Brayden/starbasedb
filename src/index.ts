@@ -35,9 +35,6 @@ export interface Env {
     EXTERNAL_DB_CLOUDFLARE_DATABASE_ID?: string;
   
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
-    ALLOWLIST: {
-        isQueryAllowed(body: Record<string, any>): Promise<Response>;
-    }
 }
 
 export enum Source {
@@ -145,17 +142,13 @@ export default {
             }
         };
 
-        // ## DO NOT REMOVE: PRE-HANDLER HOOKS ##
+        // ## DO NOT REMOVE: PRE-QUERY HOOKS ##
         // INSERT CODE HERE IF REQUIRED
-        const isQueryAllowed = await env.ALLOWLIST.isQueryAllowed(clonedRequest.body ? await clonedRequest.json() : {});
-        if (!isQueryAllowed) {
-            return createResponse(undefined, 'Query not allowed', 403);
-        }
 
         // This is the default request handler, do not modify.
         const response = await new Handler().handle(request, dataSource, env);
 
-        // ## DO NOT REMOVE: POST-HANDLER HOOKS ##
+        // ## DO NOT REMOVE: POST-QUERY HOOKS ##
         // INSERT CODE HERE IF REQUIRED
 
         return response;

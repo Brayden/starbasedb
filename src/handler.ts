@@ -99,7 +99,7 @@ export class Handler {
             }
     
             const { sql, params, transaction } = await request.json() as QueryRequest & QueryTransactionRequest;
-
+            
             if (Array.isArray(transaction) && transaction.length) {
                 const queries = transaction.map((queryObj: any) => {
                     const { sql, params } = queryObj;

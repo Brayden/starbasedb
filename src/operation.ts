@@ -34,7 +34,7 @@ export type ConnectionDetails = {
 }
 
 async function afterQuery(sql: string, result: any, isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<any> {
-    // ## DO NOT REMOVE: TEMPLATE AFTER QUERY HOOK ##
+    // ## DO NOT REMOVE: TEMPLATE POST-QUERY HOOK ##
     
     return result;
 }

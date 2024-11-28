@@ -10,7 +10,7 @@ database through a StarbaseDB instance to verify it is in the approved query lis
 This will create the tables and constraints for user signup/login, and sessions. You can do this in the Studio user interface or by hitting your query endpoint in your StarbaseDB instance.
 
 ```sql
-CREATE TABLE IF NOT EXISTS __allowlist_queries (
+CREATE TABLE IF NOT EXISTS tmp_allowlist_queries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sql_statement TEXT NOT NULL
 );
@@ -47,9 +47,11 @@ for querying data sources.
 ```
 // ## DO NOT REMOVE: PRE-HANDLER HOOKS ##
 // INSERT CODE HERE IF REQUIRED
-const isQueryAllowed = await env.ALLOWLIST.isQueryAllowed(clonedRequest.body ? await clonedRequest.json() : {});
-if (!isQueryAllowed) {
-    return createResponse(undefined, 'Query not allowed', 403);
+if (source === Source.external) {
+    const isQueryAllowed = await env.ALLOWLIST.isQueryAllowed(clonedRequest.body ? await clonedRequest.json() : {});
+    if (!isQueryAllowed) {
+        return createResponse(undefined, 'Query not allowed', 403);
+    }
 }
 ```
 
