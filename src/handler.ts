@@ -1,4 +1,4 @@
-import { DataSource, Source } from ".";
+import { DataSource, Source } from "./types";
 import { LiteREST } from "./literest";
 import { executeQuery, executeTransaction } from "./operation";
 import { createResponse, QueryRequest, QueryTransactionRequest } from "./utils";
