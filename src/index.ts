@@ -35,9 +35,6 @@ export interface Env {
     EXTERNAL_DB_CLOUDFLARE_DATABASE_ID?: string;
   
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
-    RLS: {
-        applyRLS(sql: string, dialect?: string): Promise<string | Error>
-    }
 }
 
 export default {

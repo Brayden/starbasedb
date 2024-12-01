@@ -92,8 +92,7 @@ async function executeExternalQuery(sql: string, params: any, isRaw: boolean, da
     });
 
     const results: any = await response.json();
-    const items = results.response.results?.items;
-    return await afterQuery(sql, items, isRaw, dataSource, env);
+    return results.response.results?.items;
 }
 
 export async function executeQuery(sql: string, params: any | undefined, isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<QueryResponse> {
@@ -103,13 +102,15 @@ export async function executeQuery(sql: string, params: any | undefined, isRaw: 
     }
 
     const { sql: updatedSQL, params: updatedParams } = await beforeQuery(sql, params, dataSource, env)
+    let response;
 
     if (dataSource.source === 'internal') {
-        const response = await dataSource.internalConnection?.durableObject.executeQuery(updatedSQL, updatedParams, isRaw);
-        return await afterQuery(updatedSQL, response, isRaw, dataSource, env);
+        response = await dataSource.internalConnection?.durableObject.executeQuery(updatedSQL, updatedParams, isRaw);
     } else {
-        return executeExternalQuery(updatedSQL, updatedParams, isRaw, dataSource, env);
+        response = await executeExternalQuery(updatedSQL, updatedParams, isRaw, dataSource, env);
     }
+
+    return await afterQuery(updatedSQL, response, isRaw, dataSource, env);
 }
 
 export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<QueryResponse> {
@@ -242,5 +243,5 @@ export async function executeSDKQuery(sql: string, params: any | undefined, isRa
     await db.connect();
     const { data } = await db.raw(sql, params);
     
-    return await afterQuery(sql, data, isRaw, dataSource, env);
+    return data;
 }
