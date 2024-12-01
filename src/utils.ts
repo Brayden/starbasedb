@@ -1,3 +1,5 @@
+import { corsHeaders } from "./cors";
+
 export type QueryTransactionRequest = {
     transaction?: QueryRequest[];
 }
@@ -21,6 +23,7 @@ export function createJSONResponse(data: ServerResponse): Response {
         status: data.status,
         headers: {
             'Content-Type': 'application/json',
+            ...corsHeaders
         },
     });
 }
