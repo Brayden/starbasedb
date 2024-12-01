@@ -43,9 +43,43 @@ async function beforeQuery(sql: string, params?: any[], dataSource?: DataSource,
 }
 
 async function afterQuery(sql: string, result: any, isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<any> {
+    result = isRaw ? transformRawResults(result, 'from') : result;
+
     // ## DO NOT REMOVE: POST QUERY HOOK ##
     
-    return result;
+    return isRaw ? transformRawResults(result, 'to') : result;
+}
+
+function transformRawResults(result: any, direction: 'to' | 'from'): Record<string, any> {
+    if (direction === 'from') {
+        // Convert our result from the `raw` output to a traditional object
+        result = {
+            ...result,
+            rows: result.rows.map((row: any) => 
+                result.columns.reduce((obj: any, column: string, index: number) => {
+                    obj[column] = row[index];
+                    return obj;
+                }, {})
+            )
+        };
+
+        return result.rows
+    } else if (direction === 'to') {
+        // Convert our traditional object to the `raw` output format
+        const columns = Object.keys(result[0] || {});
+        const rows = result.map((row: any) => columns.map(col => row[col]));
+        
+        return {
+            columns,
+            rows,
+            meta: {
+                rows_read: rows.length,
+                rows_written: 0
+            }
+        };
+    }
+    
+    return result
 }
 
 // Outerbase API supports more data sources than can be supported via Cloudflare Workers. For those data
