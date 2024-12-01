@@ -48,10 +48,6 @@ async function afterQuery(sql: string, result: any, isRaw: boolean, dataSource?:
     return result;
 }
 
-function cleanseQuery(sql: string): string {
-    return sql.replaceAll('\n', ' ')
-}
-
 // Outerbase API supports more data sources than can be supported via Cloudflare Workers. For those data
 // sources we recommend you connect your database to Outerbase and provide the bases API key for queries
 // to be made. Otherwise, for supported data sources such as Postgres, MySQL, D1, StarbaseDB, Turso and Mongo
@@ -86,7 +82,7 @@ async function executeExternalQuery(sql: string, params: any, isRaw: boolean, da
             'X-Source-Token': dataSource.externalConnection.outerbaseApiKey,
         },
         body: JSON.stringify({
-            query: cleanseQuery(sql),
+            query: sql.replaceAll('\n', ' '),
             params: convertedParams,
         }),
     });
