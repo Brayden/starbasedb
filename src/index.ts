@@ -2,6 +2,7 @@ import { createResponse } from './utils';
 import handleStudioRequest from "./studio";
 import { Handler } from "./handler";
 import { DatabaseStub, DataSource, RegionLocationHint, Source } from './types';
+import { corsPreflight } from './cors';
 export { DatabaseDurableObject } from './do'; 
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
@@ -51,6 +52,9 @@ export default {
             const url = new URL(request.url);
             const pathname = url.pathname;
             const isWebSocket = request.headers.get("Upgrade") === "websocket";
+
+            // Authorize the request with CORS rules before proceeding.
+            corsPreflight(request);
 
             /**
              * If the request is a GET request to the /studio endpoint, we can handle the request
@@ -105,8 +109,7 @@ export default {
                 }
             };
 
-            const response = await new Handler().handle(request, dataSource, env);
-            return response;
+            return await new Handler().handle(request, dataSource, env);
         } catch (error) {
             // Return error response to client
             return createResponse(
