@@ -5,7 +5,7 @@ import { createClient as createTursoConnection } from '@libsql/client/web';
 
 // Import how we interact with the databases through the Outerbase SDK
 import { CloudflareD1Connection, MongoDBConnection, MySQLConnection, PostgreSQLConnection, StarbaseConnection, TursoConnection } from '@outerbase/sdk';
-import { DataSource } from '.';
+import { DataSource } from './types';
 import { Env } from './'
 import { MongoClient } from 'mongodb';
 
@@ -33,14 +33,53 @@ export type ConnectionDetails = {
     defaultSchema: string,
 }
 
-async function afterQuery(sql: string, result: any, isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<any> {
-    // ## DO NOT REMOVE: TEMPLATE AFTER QUERY HOOK ##
+async function beforeQuery(sql: string, params?: any[], dataSource?: DataSource, env?: Env): Promise<{ sql: string, params?: any[] }> {
+    // ## DO NOT REMOVE: PRE QUERY HOOK ##
     
-    return result;
+    return {
+        sql,
+        params
+    }
 }
 
-function cleanseQuery(sql: string): string {
-    return sql.replaceAll('\n', ' ')
+async function afterQuery(sql: string, result: any, isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<any> {
+    result = isRaw ? transformRawResults(result, 'from') : result;
+
+    // ## DO NOT REMOVE: POST QUERY HOOK ##
+    
+    return isRaw ? transformRawResults(result, 'to') : result;
+}
+
+function transformRawResults(result: any, direction: 'to' | 'from'): Record<string, any> {
+    if (direction === 'from') {
+        // Convert our result from the `raw` output to a traditional object
+        result = {
+            ...result,
+            rows: result.rows.map((row: any) => 
+                result.columns.reduce((obj: any, column: string, index: number) => {
+                    obj[column] = row[index];
+                    return obj;
+                }, {})
+            )
+        };
+
+        return result.rows
+    } else if (direction === 'to') {
+        // Convert our traditional object to the `raw` output format
+        const columns = Object.keys(result[0] || {});
+        const rows = result.map((row: any) => columns.map(col => row[col]));
+        
+        return {
+            columns,
+            rows,
+            meta: {
+                rows_read: rows.length,
+                rows_written: 0
+            }
+        };
+    }
+    
+    return result
 }
 
 // Outerbase API supports more data sources than can be supported via Cloudflare Workers. For those data
@@ -68,6 +107,7 @@ async function executeExternalQuery(sql: string, params: any, isRaw: boolean, da
         sql = sql.replace(/\?/g, () => `:param${paramIndex++}`);
     }
 
+
     const API_URL = 'https://app.outerbase.com';
     const response = await fetch(`${API_URL}/api/v1/ezql/raw`, {
         method: 'POST',
@@ -76,14 +116,13 @@ async function executeExternalQuery(sql: string, params: any, isRaw: boolean, da
             'X-Source-Token': dataSource.externalConnection.outerbaseApiKey,
         },
         body: JSON.stringify({
-            query: cleanseQuery(sql),
+            query: sql.replaceAll('\n', ' '),
             params: convertedParams,
         }),
     });
 
     const results: any = await response.json();
-    const items = results.response.results?.items;
-    return await afterQuery(sql, items, isRaw, dataSource, env);
+    return results.response.results?.items;
 }
 
 export async function executeQuery(sql: string, params: any | undefined, isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<QueryResponse> {
@@ -92,12 +131,16 @@ export async function executeQuery(sql: string, params: any | undefined, isRaw: 
         return []
     }
 
+    const { sql: updatedSQL, params: updatedParams } = await beforeQuery(sql, params, dataSource, env)
+    let response;
+
     if (dataSource.source === 'internal') {
-        const response = await dataSource.internalConnection?.durableObject.executeQuery(sql, params, isRaw);
-        return await afterQuery(sql, response, isRaw, dataSource, env);
+        response = await dataSource.internalConnection?.durableObject.executeQuery(updatedSQL, updatedParams, isRaw);
     } else {
-        return executeExternalQuery(sql, params, isRaw, dataSource, env);
+        response = await executeExternalQuery(updatedSQL, updatedParams, isRaw, dataSource, env);
     }
+
+    return await afterQuery(updatedSQL, response, isRaw, dataSource, env);
 }
 
 export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<QueryResponse> {
@@ -106,30 +149,14 @@ export async function executeTransaction(queries: { sql: string; params?: any[] 
         return []
     }
     
-    if (dataSource.source === 'internal') {
-        const results: any[] = [];
+    const results = [];
 
-        for (const query of queries) {
-            const result = await dataSource.internalConnection?.durableObject.executeTransaction(queries, isRaw);
-            if (result) {
-                const processedResults = await Promise.all(
-                    result.map(r => afterQuery(query.sql, r, isRaw, dataSource, env))
-                );
-                results.push(...processedResults);
-            }
-        }
-        
-        return results;
-    } else {
-        const results = [];
-
-        for (const query of queries) {
-            const result = await executeExternalQuery(query.sql, query.params, isRaw, dataSource, env);
-            results.push(result);
-        }
-        
-        return results;
+    for (const query of queries) {
+        const result = await executeQuery(query.sql, query.params, isRaw, dataSource, env);
+        results.push(result);
     }
+    
+    return results;
 }
 
 async function createSDKPostgresConnection(env: Env): Promise<ConnectionDetails> {
@@ -246,5 +273,5 @@ export async function executeSDKQuery(sql: string, params: any | undefined, isRa
     await db.connect();
     const { data } = await db.raw(sql, params);
     
-    return await afterQuery(sql, data, isRaw, dataSource, env);
+    return data;
 }
