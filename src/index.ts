@@ -2,7 +2,7 @@ import { createResponse } from './utils';
 import handleStudioRequest from "./studio";
 import { Handler } from "./handler";
 import { DatabaseStub, DataSource, RegionLocationHint, Source } from './types';
-import { corsHeaders, corsPreflight } from './cors';
+import { corsPreflight } from './cors';
 export { DatabaseDurableObject } from './do'; 
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';

@@ -35,7 +35,3 @@ export function createResponse(result: any, error: string | undefined, status: n
         status,
     });
 };
-
-export function createResponseFromOperationResponse(response: { result?: any, error?: string | undefined, status: number }): Response {
-    return createResponse(response.result, response.error, response.status);
-}
