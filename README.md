@@ -37,9 +37,11 @@
 <br />
 <h2>Roadmap</h2>
 <ul>
+  <li><strong>Migrations</strong> for applying schema updates in safe sequential order</li>
+  <li><strong>JWT Authentication</strong> template for quickly allowing user auth flows</li>
+  <li><strong>Row Level Security (RLS)</strong> template for preventing data access on unauthorized rows</li>
   <li><strong>Point in Time Rollbacks</strong> for rolling back your database to any minute in the past 30 days</li>
   <li><strong>Data Replication</strong> to scale reads beyond the 1,000 RPS limitation</li>
-  <li><strong>Data Streaming</strong> for streaming responses back as rows are read</li>
   <li><strong>Data Syncing</strong> between local source and your database</li>
   <li><strong>Scheduled CRON Tasks</strong> to execute code at desired intervals</li>
 </ul>

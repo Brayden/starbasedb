@@ -1,5 +1,5 @@
 import { createResponse } from '../utils';
-import { DataSource, Source } from "..";
+import { DataSource, Source } from "../types";
 import { executeQuery, executeTransaction } from "../operation";
 import { Env } from "../index"
 

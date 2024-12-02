@@ -1,4 +1,4 @@
-import { DataSource, Source } from ".";
+import { DataSource, Source } from "./types";
 import { LiteREST } from "./literest";
 import { executeQuery, executeTransaction } from "./operation";
 import { createResponse, QueryRequest, QueryTransactionRequest } from "./utils";
@@ -125,7 +125,7 @@ export class Handler {
             return createResponse(response, undefined, 200);
         } catch (error: any) {
             console.error('Query Route Error:', error);
-            return createResponse(undefined, error || 'An unexpected error occurred.', 500);
+            return createResponse(undefined, error?.message || 'An unexpected error occurred.', 500);
         }
     }
 

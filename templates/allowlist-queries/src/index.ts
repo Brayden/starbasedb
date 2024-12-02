@@ -43,8 +43,8 @@ export default class AllowlistQueriesEntrypoint extends WorkerEntrypoint<Env> {
         }
     }
 
-    async isQueryAllowed(body: Record<string, any>): Promise<boolean> {
-        // Load allow list if not already loaded
+    async isQueryAllowed(sql: string): Promise<boolean | Error> {
+        // Load allowlist if not already loaded
         if (!this.allowList) {
             this.allowList = await this.loadAllowList();
         }
@@ -52,37 +52,22 @@ export default class AllowlistQueriesEntrypoint extends WorkerEntrypoint<Env> {
         const normalizedAllowList = this.allowList.map(query => parser.astify(normalizeSQL(query)));
         
         try {
-            const { sql, transaction } = body;
-
-            let queries: QueryRequest[] = [];
-
-            if (transaction) {
-                queries = transaction
-            } else if (sql) {
-                queries = [{
-                    sql
-                }]
-            }
-        
-            if (!sql && !transaction) {
-                return false;
+            if (!sql) {
+                return Error('No SQL provided for allowlist check')
+                // return false;
             }
             
             let isAllowed = true;
 
-            // Loop through each query object and test if it meets the requirements.
-            queries.forEach((query: QueryRequest) => {
-                const normalizedQuery = parser.astify(normalizeSQL(query.sql));
-                const isCurrentAllowed = normalizedAllowList.some(
-                    allowedQuery => JSON.stringify(allowedQuery) === JSON.stringify(normalizedQuery)
-                );
+            const normalizedQuery = parser.astify(normalizeSQL(sql));
+            const isCurrentAllowed = normalizedAllowList.some(
+                allowedQuery => JSON.stringify(allowedQuery) === JSON.stringify(normalizedQuery)
+            );
 
-                // If any of the provided queries fail, they all fail.
-                if (!query.sql || !isCurrentAllowed) {
-                    isAllowed = false;
-                    return;
-                }
-            });
+            if (!sql || !isCurrentAllowed) {
+                return Error('Query not allowed')
+                // isAllowed = false;
+            }
 
             return isAllowed;
         } catch (error) {
