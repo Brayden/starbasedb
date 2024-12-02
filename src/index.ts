@@ -35,6 +35,9 @@ export interface Env {
     EXTERNAL_DB_CLOUDFLARE_DATABASE_ID?: string;
   
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
+    ALLOWLIST: {
+        isQueryAllowed(body: Record<string, any>): Promise<Response>;
+    }
 }
 
 export enum Source {
