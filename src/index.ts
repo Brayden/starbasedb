@@ -54,7 +54,13 @@ export default {
             const isWebSocket = request.headers.get("Upgrade") === "websocket";
 
             // Authorize the request with CORS rules before proceeding.
-            corsPreflight(request);
+            if (request.method === 'OPTIONS') {
+                const preflightResponse = corsPreflight(request)
+                
+                if (preflightResponse) {
+                    return preflightResponse;
+                }
+            }
 
             /**
              * If the request is a GET request to the /studio endpoint, we can handle the request
