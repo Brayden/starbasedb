@@ -41,7 +41,14 @@ async function beforeQuery(sql: string, params?: any[], dataSource?: DataSource,
         if (isAllowed instanceof Error) {
             throw Error(isAllowed.message)
         }
+
+        const rls = await env?.RLS.applyRLS(sql, env?.EXTERNAL_DB_TYPE)
+        if (rls !== undefined && !(rls instanceof Error)) {
+            sql = rls
+        }
     }
+
+    console.log('SQL to Run: ', sql)
 
     return {
         sql,
@@ -279,6 +286,8 @@ export async function executeSDKQuery(sql: string, params: any | undefined, isRa
 
     await db.connect();
     const { data } = await db.raw(sql, params);
+
+    console.log('SDK Data: ', sql, data)
     
     return data;
 }

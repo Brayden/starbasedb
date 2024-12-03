@@ -38,6 +38,9 @@ export interface Env {
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
     ALLOWLIST: {
         isQueryAllowed(sql: string): Promise<boolean | Error>;
+    },
+    RLS: {
+        applyRLS(sql: string, dialect?: string): Promise<string | Error>
     }
 }
 
