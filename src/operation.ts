@@ -5,7 +5,7 @@ import { createClient as createTursoConnection } from '@libsql/client/web';
 
 // Import how we interact with the databases through the Outerbase SDK
 import { CloudflareD1Connection, MongoDBConnection, MySQLConnection, PostgreSQLConnection, StarbaseConnection, TursoConnection } from '@outerbase/sdk';
-import { DataSource } from './types';
+import { DataSource, Source } from './types';
 import { Env } from './'
 import { MongoClient } from 'mongodb';
 
@@ -35,7 +35,21 @@ export type ConnectionDetails = {
 
 async function beforeQuery(sql: string, params?: any[], dataSource?: DataSource, env?: Env): Promise<{ sql: string, params?: any[] }> {
     // ## DO NOT REMOVE: PRE QUERY HOOK ##
-    
+    if (dataSource?.source === Source.external) {
+        // For current use case, only applying allowlist rules to the external data source
+        const isAllowed = await env?.ALLOWLIST.isQueryAllowed(sql);
+        if (isAllowed instanceof Error) {
+            throw Error(isAllowed.message)
+        }
+
+        const rls = await env?.RLS.applyRLS(sql, env?.EXTERNAL_DB_TYPE)
+        if (rls !== undefined && !(rls instanceof Error)) {
+            sql = rls
+        }
+    }
+
+    console.log('SQL to Run: ', sql)
+
     return {
         sql,
         params
@@ -272,6 +286,8 @@ export async function executeSDKQuery(sql: string, params: any | undefined, isRa
 
     await db.connect();
     const { data } = await db.raw(sql, params);
+
+    console.log('SDK Data: ', sql, data)
     
     return data;
 }

@@ -3,5 +3,10 @@
 interface Env {
 	AUTHORIZATION_TOKEN: "ABC123";
 	REGION: "auto";
+	STUDIO_USER: "admin";
+	STUDIO_PASS: "123456";
+	EXTERNAL_DB_TYPE: "postgres";
 	DATABASE_DURABLE_OBJECT: DurableObjectNamespace<import("./src/index").DatabaseDurableObject>;
+	ALLOWLIST: Fetcher;
+	RLS: Fetcher;
 }
