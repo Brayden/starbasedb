@@ -5,6 +5,8 @@ import { DatabaseStub, DataSource, RegionLocationHint, Source } from './types';
 import { corsPreflight } from './cors';
 export { DatabaseDurableObject } from './do'; 
 
+import jwt from "@tsndr/cloudflare-worker-jwt"
+
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
 export interface Env {
@@ -34,13 +36,15 @@ export interface Env {
     EXTERNAL_DB_CLOUDFLARE_API_KEY?: string;
     EXTERNAL_DB_CLOUDFLARE_ACCOUNT_ID?: string;
     EXTERNAL_DB_CLOUDFLARE_DATABASE_ID?: string;
+
+    AUTH_JWT_SECRET?: string;
   
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
     ALLOWLIST: {
         isQueryAllowed(sql: string): Promise<boolean | Error>;
     },
     RLS: {
-        applyRLS(sql: string, dialect?: string): Promise<string | Error>
+        applyRLS(sql: string, context?: Record<string, any>, dialect?: string): Promise<string | Error>
     }
 }
 
@@ -58,6 +62,7 @@ export default {
             const url = new URL(request.url);
             const pathname = url.pathname;
             const isWebSocket = request.headers.get("Upgrade") === "websocket";
+            let jwtPayload;
 
             // Authorize the request with CORS rules before proceeding.
             if (request.method === 'OPTIONS') {
@@ -87,8 +92,29 @@ export default {
              * authorization checks here to ensure the request signature is valid and authorized to
              * interact with the Durable Object.
              */
-            if (request.headers.get('Authorization') !== `Bearer ${env.AUTHORIZATION_TOKEN}` && !isWebSocket) {
-                return createResponse(undefined, 'Unauthorized request', 401)
+            if (!isWebSocket) {
+                const authorizationValue = request.headers.get('Authorization')
+
+                // The `AUTHORIZATION_TOKEN` is like an admin path of automatically authorizing the
+                // incoming request as verified. If this does not match then we next want to check
+                // if the `Authorization` header contains a JWT session token we can verify before
+                // allowing the user to proceed to our request handler.
+                if (authorizationValue !== `Bearer ${env.AUTHORIZATION_TOKEN}`) {
+                    const authorizationWithoutBearer = authorizationValue?.replace('Bearer ', '');
+
+                    if (!env.AUTH_JWT_SECRET || authorizationWithoutBearer === undefined) {
+                        return createResponse(undefined, 'Unauthorized request', 400)
+                    }
+
+                    const { payload } = await jwt.decode(authorizationWithoutBearer) as any  
+                    // const { payload } = await jwt.verify(authorizationWithoutBearer, env?.AUTH_JWT_SECRET) as any     
+                    
+                    if (!payload.sub) {
+                        return createResponse(undefined, 'Unauthorized request', 401)
+                    } else {
+                        jwtPayload = payload;
+                    }
+                }
             } else if (isWebSocket) {
                 /**
                  * Web socket connections cannot pass in an Authorization header into their requests,
@@ -118,6 +144,9 @@ export default {
                 },
                 externalConnection: {
                     outerbaseApiKey: env.OUTERBASE_API_KEY ?? ''
+                },
+                context: {
+                    ...jwtPayload
                 }
             };
 

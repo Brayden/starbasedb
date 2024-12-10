@@ -6,6 +6,7 @@ interface Env {
 	STUDIO_USER: "admin";
 	STUDIO_PASS: "123456";
 	EXTERNAL_DB_TYPE: "postgres";
+	AUTH_JWT_SECRET: "";
 	DATABASE_DURABLE_OBJECT: DurableObjectNamespace<import("./src/index").DatabaseDurableObject>;
 	ALLOWLIST: Fetcher;
 	RLS: Fetcher;

@@ -40,32 +40,49 @@ export default class AllowlistQueriesEntrypoint extends WorkerEntrypoint<Env> {
     }
 
     async isQueryAllowed(sql: string): Promise<boolean | Error> {
-        // Load allowlist if not already loaded. Since this function may be invoked
-        // multiple times for transactions, we only want to have to fetch this list
-        // a single time.
         if (!this.allowlist) {
             this.allowlist = await this.loadAllowlist();
             this.normalizedAllowlist = this.allowlist.map(query => parser.astify(normalizeSQL(query)));
         }
         
-        
         try {
             if (!sql) {
                 return Error('No SQL provided for allowlist check')
             }
-            
-            let isAllowed = true;
 
             const normalizedQuery = parser.astify(normalizeSQL(sql));
-            const isCurrentAllowed = this.normalizedAllowlist?.some(
-                allowedQuery => JSON.stringify(allowedQuery) === JSON.stringify(normalizedQuery)
-            );
+            
+            // Compare ASTs while ignoring specific values
+            const isCurrentAllowed = this.normalizedAllowlist?.some(allowedQuery => {
+                // Create deep copies to avoid modifying original ASTs
+                const allowedAst = JSON.parse(JSON.stringify(allowedQuery));
+                const queryAst = JSON.parse(JSON.stringify(normalizedQuery));
+                
+                // Remove or normalize value fields from both ASTs
+                const normalizeAst = (ast: any) => {
+                    if (Array.isArray(ast)) {
+                        ast.forEach(normalizeAst);
+                    } else if (ast && typeof ast === 'object') {
+                        // Remove or normalize fields that contain specific values
+                        if ('value' in ast) {
+                            ast.value = '?';
+                        }
+                        Object.values(ast).forEach(normalizeAst);
+                    }
+                    return ast;
+                };
 
-            if (!sql || !isCurrentAllowed) {
+                normalizeAst(allowedAst);
+                normalizeAst(queryAst);
+                
+                return JSON.stringify(allowedAst) === JSON.stringify(queryAst);
+            });
+
+            if (!isCurrentAllowed) {
                 return Error('Query not allowed')
             }
 
-            return isAllowed;
+            return true;
         } catch (error: any) {
             console.error('Error:', error);
             return Error(error?.message ?? 'Error');

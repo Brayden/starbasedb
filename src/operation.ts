@@ -35,20 +35,19 @@ export type ConnectionDetails = {
 
 async function beforeQuery(sql: string, params?: any[], dataSource?: DataSource, env?: Env): Promise<{ sql: string, params?: any[] }> {
     // ## DO NOT REMOVE: PRE QUERY HOOK ##
-    if (dataSource?.source === Source.external) {
-        // For current use case, only applying allowlist rules to the external data source
+    if (dataSource?.context?.sub) {
         const isAllowed = await env?.ALLOWLIST.isQueryAllowed(sql);
         if (isAllowed instanceof Error) {
             throw Error(isAllowed.message)
         }
 
-        const rls = await env?.RLS.applyRLS(sql, env?.EXTERNAL_DB_TYPE)
+        const rls = await env?.RLS.applyRLS(sql, dataSource?.context, env?.EXTERNAL_DB_TYPE)
         if (rls !== undefined && !(rls instanceof Error)) {
             sql = rls
+        } else if (rls instanceof Error) {
+            throw Error(rls.message)
         }
     }
-
-    console.log('SQL to Run: ', sql)
 
     return {
         sql,
@@ -286,8 +285,6 @@ export async function executeSDKQuery(sql: string, params: any | undefined, isRa
 
     await db.connect();
     const { data } = await db.raw(sql, params);
-
-    console.log('SDK Data: ', sql, data)
     
     return data;
 }
