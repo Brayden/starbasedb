@@ -7,6 +7,15 @@ compatibility_flags = ["nodejs_compat_v2"]
 
 # Service Bindings
 ## DO NOT REMOVE: TEMPLATE SERVICES ##
+[[services]]
+binding = "ALLOWLIST"
+service = "starbasedb_allowlist_queries"
+entrypoint = "AllowlistQueriesEntrypoint"
+
+[[services]]
+binding = "RLS"
+service = "starbasedb_rls"
+entrypoint = "RLSEntrypoint"
 
 # Workers Logs
 # Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
@@ -33,13 +42,13 @@ REGION = "auto"
 
 # Uncomment the section below to create a user for logging into your database UI.
 # You can access the Studio UI at: https://your_endpoint/studio
-# STUDIO_USER = "admin"
-# STUDIO_PASS = "123456"
+STUDIO_USER = "admin"
+STUDIO_PASS = "123456"
 
 # External database source details
 # This enables Starbase to connect to an external data source
 # OUTERBASE_API_KEY = ""
-# EXTERNAL_DB_TYPE = "postgres"
+EXTERNAL_DB_TYPE = "postgres"
 # EXTERNAL_DB_HOST = ""
 # EXTERNAL_DB_PORT = 0
 # EXTERNAL_DB_USER = ""
@@ -55,3 +64,5 @@ REGION = "auto"
 # EXTERNAL_DB_CLOUDFLARE_API_KEY = ""
 # EXTERNAL_DB_CLOUDFLARE_ACCOUNT_ID = ""
 # EXTERNAL_DB_CLOUDFLARE_DATABASE_ID = ""
+
+AUTH_JWT_SECRET = ""

@@ -12,6 +12,7 @@ export type DataSource = {
     externalConnection?: {
         outerbaseApiKey: string;
     };
+    context?: Record<string, any>;
 }
 
 export interface InternalConnection {

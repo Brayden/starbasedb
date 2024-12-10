@@ -5,7 +5,7 @@ import { createClient as createTursoConnection } from '@libsql/client/web';
 
 // Import how we interact with the databases through the Outerbase SDK
 import { CloudflareD1Connection, MongoDBConnection, MySQLConnection, PostgreSQLConnection, StarbaseConnection, TursoConnection } from '@outerbase/sdk';
-import { DataSource } from './types';
+import { DataSource, Source } from './types';
 import { Env } from './'
 import { MongoClient } from 'mongodb';
 
@@ -35,7 +35,20 @@ export type ConnectionDetails = {
 
 async function beforeQuery(sql: string, params?: any[], dataSource?: DataSource, env?: Env): Promise<{ sql: string, params?: any[] }> {
     // ## DO NOT REMOVE: PRE QUERY HOOK ##
-    
+    if (dataSource?.context?.sub) {
+        const isAllowed = await env?.ALLOWLIST.isQueryAllowed(sql);
+        if (isAllowed instanceof Error) {
+            throw Error(isAllowed.message)
+        }
+
+        const rls = await env?.RLS.applyRLS(sql, dataSource?.context, env?.EXTERNAL_DB_TYPE)
+        if (rls !== undefined && !(rls instanceof Error)) {
+            sql = rls
+        } else if (rls instanceof Error) {
+            throw Error(rls.message)
+        }
+    }
+
     return {
         sql,
         params
