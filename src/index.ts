@@ -107,7 +107,7 @@ export default {
                     }
 
                     const { payload } = await jwt.decode(authorizationWithoutBearer) as any  
-                    // const { payload } = await jwt.verify(authorizationWithoutBearer, env?.AUTH_JWT_SECRET) as any     
+                    // const verifiedPayload = await jwt.verify(authorizationWithoutBearer, env?.AUTH_JWT_SECRET) as any
                     
                     if (!payload.sub) {
                         return createResponse(undefined, 'Unauthorized request', 401)

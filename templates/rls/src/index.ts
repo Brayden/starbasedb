@@ -45,6 +45,16 @@ export default class RLSEntrypoint extends WorkerEntrypoint<Env> {
     // Currently, entrypoints without a named handler are not supported
     async fetch() { return new Response(null, { status: 404 }); }
 
+    private insertContextValues(sql: string, context?: Record<string, any>): string {
+        // Replace context.id() with context?.sub
+        sql = sql.replace(/context\.id\(\)/g, `'${context?.sub}'`);
+
+        // Replace context.anyKey() with context?[anyKey]
+        sql = sql.replace(/context\.(\w+)\(\)/g, (_, key) => `'${context?.[key]}'`);
+
+        return sql;
+    }
+
     private async loadPolicies(context?: Record<string, any>): Promise<Policy[]> {
         let id: DurableObjectId = this.env.DATABASE_DURABLE_OBJECT.idFromName(DURABLE_OBJECT_ID);
 		this.stub = this.env.DATABASE_DURABLE_OBJECT.get(id);
@@ -153,7 +163,7 @@ export default class RLSEntrypoint extends WorkerEntrypoint<Env> {
             return error as Error;
         }
 
-        return modifiedSql;
+        return this.insertContextValues(modifiedSql, context);
     }
 
     private applyRLSToAst(ast: any): void {

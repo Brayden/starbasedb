@@ -36,10 +36,10 @@ export type ConnectionDetails = {
 async function beforeQuery(sql: string, params?: any[], dataSource?: DataSource, env?: Env): Promise<{ sql: string, params?: any[] }> {
     // ## DO NOT REMOVE: PRE QUERY HOOK ##
     if (dataSource?.context?.sub) {
-        const isAllowed = await env?.ALLOWLIST.isQueryAllowed(sql);
-        if (isAllowed instanceof Error) {
-            throw Error(isAllowed.message)
-        }
+        // const isAllowed = await env?.ALLOWLIST.isQueryAllowed(sql);
+        // if (isAllowed instanceof Error) {
+        //     throw Error(isAllowed.message)
+        // }
 
         const rls = await env?.RLS.applyRLS(sql, dataSource?.context, env?.EXTERNAL_DB_TYPE)
         if (rls !== undefined && !(rls instanceof Error)) {
