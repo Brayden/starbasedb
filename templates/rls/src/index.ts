@@ -10,7 +10,7 @@ interface Env {
 type Policy = {
     action: string;
     condition: {
-        type: string
+        type: string;
         operator: string;
         left: {
             type: string;
@@ -42,22 +42,20 @@ export default class RLSEntrypoint extends WorkerEntrypoint<Env> {
     private stub: any;
     private policies: Policy[] = [];
 
-    // Currently, entrypoints without a named handler are not supported
     async fetch() { return new Response(null, { status: 404 }); }
 
-    private insertContextValues(sql: string, context?: Record<string, any>): string {
-        // Replace context.id() with context?.sub
-        sql = sql.replace(/context\.id\(\)/g, `'${context?.sub}'`);
-
-        // Replace context.anyKey() with context?[anyKey]
-        sql = sql.replace(/context\.(\w+)\(\)/g, (_, key) => `'${context?.[key]}'`);
-
-        return sql;
+    private normalizeIdentifier(name: string): string {
+        if (!name) return name;
+        if ((name.startsWith('"') && name.endsWith('"')) ||
+            (name.startsWith('`') && name.endsWith('`'))) {
+            return name.slice(1, -1);
+        }
+        return name;
     }
 
     private async loadPolicies(context?: Record<string, any>): Promise<Policy[]> {
         let id: DurableObjectId = this.env.DATABASE_DURABLE_OBJECT.idFromName(DURABLE_OBJECT_ID);
-		this.stub = this.env.DATABASE_DURABLE_OBJECT.get(id);
+        this.stub = this.env.DATABASE_DURABLE_OBJECT.get(id);
 
         try {
             const { result } = await this.stub.executeExternalQuery(
@@ -65,32 +63,43 @@ export default class RLSEntrypoint extends WorkerEntrypoint<Env> {
                 []
             );
 
-            return result.map((row: any) => {
+            if (!result || result.length === 0) {
+                // Discussion point to be had here. For safety precautions I am ejecting
+                // out of the entire flow if no results are responded back with for example
+                // the case where the database instance is not responding, we don't want to 
+                // simply assume that the incoming SQL should be processed. Instead, we need
+                // to know that we received all the rules for us to enforce them. When no rules
+                // exist we exit with an error.
+                throw new Error("Error fetching RLS policies. No policies may exist or there was an error fetching.");
+            }
+
+            const policies = result.map((row: any) => {
                 let value = row.value;
                 const valueType = row.value_type?.toLowerCase();
-
-                // Handle scenarios when the replacement value is marked as context function value
-                // A helper exists for the special case where a user might define `context.id()`
-                // and we interpret that manually to match to the JWT `sub` key which typically
-                // contains the userId value. You can pass any other key from the JWT by doing
-                // `context.keyName()` and we will replace the value from the JWT in the SQL.
-                if (value === 'context.id()') {
-                    value = context?.sub;
-                } else if (/^context\.\w+\(\)$/.test(value)) {
-                    const key = value.match(/^context\.(\w+)\(\)$/)[1];
-                    value = context?.[key];
-                }
 
                 // Currently we are supporting two `value_type` options for the time being. By
                 // default values are assumed as `string` unless the type is expressed as another
                 // in which we cast it to that type. We will need to handle scenarios where
                 // the SQL statement itself will need the type casting.
                 if (valueType === 'number') {
-                    value = Number(value)
+                    value = Number(value);
 
                     // For example, some databases may require casting like the commented out
-                    // string here below.
+                    // string here below. We will want to come back and help cover those
+                    // particular situations.
                     // value = `${value}::INT`
+                }
+                
+                let tableName = row.schema ? `${row.schema}.${row.table}` : row.table;
+                tableName = this.normalizeIdentifier(tableName);
+                const columnName = this.normalizeIdentifier(row.column);
+
+                // If the policy value is context.id(), use a placeholder
+                let rightNode;
+                if (value === 'context.id()') {
+                    rightNode = { type: 'string', value: '__CONTEXT_ID__' };
+                } else {
+                    rightNode = { type: 'string', value: value };
                 }
 
                 // This policy will help construct clauses, such as a WHERE, for the criteria to be met.
@@ -102,11 +111,13 @@ export default class RLSEntrypoint extends WorkerEntrypoint<Env> {
                     condition: {
                         type: 'binary_expr',
                         operator: row.operator,
-                        left: { type: 'column_ref', table: row.schema ? `${row.schema}.${row.table}` : row.table, column: row.column },
-                        right: { type: 'string', value: value },
+                        left: { type: 'column_ref', table: tableName, column: columnName },
+                        right: rightNode
                     }
-                }
+                };
             });
+
+            return policies;
         } catch (error) {
             console.error('Error loading RLS policies:', error);
             return [];
@@ -118,16 +129,16 @@ export default class RLSEntrypoint extends WorkerEntrypoint<Env> {
             return Error('No SQL query found in RLS plugin.')
         }
 
-        this.policies = await this.loadPolicies(context)
+        this.policies = await this.loadPolicies(context);
 
         if (!dialect) dialect = 'sqlite'
         if (dialect.toLowerCase() === 'postgres') dialect = 'postgresql'
-        
+
         let ast;
         let modifiedSql;
         const sqlifyOptions = {
             database: dialect,
-            quote: ''  // This prevents adding backticks/quotes around identifiers
+            quote: ''
         };
 
         // We are originally provided a SQL statement to evaluate. The first task we must
@@ -136,8 +147,7 @@ export default class RLSEntrypoint extends WorkerEntrypoint<Env> {
         // begin applying our RLS policies by injecting items into the abstract syntax
         // tree which will later be converted back to an executable SQL statement.
         try {
-            ast = parser.astify(sql);
-
+            ast = parser.astify(sql, { database: dialect });
             if (Array.isArray(ast)) {
                 ast.forEach(singleAst => this.applyRLSToAst(singleAst));
             } else {
@@ -147,7 +157,7 @@ export default class RLSEntrypoint extends WorkerEntrypoint<Env> {
             console.error('Error parsing SQL:', error);
             return error as Error;
         }
-        
+
         // After the query was converted into an AST and had any RLS policy rules
         // injected into the abstract syntax tree dynamically, now we are ready to
         // convert the AST object back into a SQL statement that the database can
@@ -163,172 +173,159 @@ export default class RLSEntrypoint extends WorkerEntrypoint<Env> {
             return error as Error;
         }
 
-        return this.insertContextValues(modifiedSql, context);
+        // Replace placeholder with the user's ID properly quoted
+        if (context?.sub) {
+            modifiedSql = modifiedSql.replace(/'__CONTEXT_ID__'/g, `'${context.sub}'`);
+        }
+
+        return modifiedSql;
     }
 
     private applyRLSToAst(ast: any): void {
         if (!ast) return;
 
-        // Handle WITH (CTE) queries
-        if (ast.with) {
-            ast.with.ctes?.forEach((cte: any) => {
-                this.applyRLSToAst(cte.stmt);
-            });
+        // Handle WITH (CTE) queries as arrays
+        if (ast.with && Array.isArray(ast.with)) {
+            for (const cte of ast.with) {
+                if (cte.stmt) {
+                    this.applyRLSToAst(cte.stmt);
+                }
+            }
         }
 
-        // Handle UNION, INTERSECT, etc.
-        if (ast.type === 'union' || ast.type === 'intersect' || ast.type === 'except') {
+        // Set operations
+        if (['union', 'intersect', 'except'].includes(ast.type)) {
             this.applyRLSToAst(ast.left);
             this.applyRLSToAst(ast.right);
             return;
         }
 
-        // Handle INSERT/UPDATE/DELETE with subqueries
+        // Subqueries in INSERT/UPDATE/DELETE
         if (ast.type === 'insert' && ast.from) {
             this.applyRLSToAst(ast.from);
         }
-
-        // Traverse any WHERE clause where it exists to make sure we apply
-        // any rules to embedded subqueries within our SQL
         if (ast.type === 'update' && ast.where) {
             this.traverseWhere(ast.where);
         }
-
         if (ast.type === 'delete' && ast.where) {
             this.traverseWhere(ast.where);
         }
 
         const tablesWithRules: Record<string, string[]> = {}
         this.policies.forEach(policy => {
-            const table: string = policy.condition.left.table;
-            if (!tablesWithRules[table]) {
-                tablesWithRules[table] = []
+            const tbl = this.normalizeIdentifier(policy.condition.left.table);
+            if (!tablesWithRules[tbl]) {
+                tablesWithRules[tbl] = [];
             }
-
-            tablesWithRules[table].push(policy.action)
+            tablesWithRules[tbl].push(policy.action);
         });
 
-        // Get the current statement type
-        const statementType = ast.type.toUpperCase();
-
-        // For SELECT/UPDATE/DELETE/INSERT statements
-        if (['SELECT', 'UPDATE', 'DELETE', 'INSERT'].includes(statementType)) {
-            // Get tables based on statement type
-            let tables: string[] = [];
-
-            if (statementType === 'INSERT') {
-                // For INSERT, check the target table
-                const tableName = ast.table[0].table;
-                tables = [tableName.includes('.') ? tableName.split('.')[1] : tableName];
-            } else if (statementType === 'UPDATE') {
-                // For UPDATE, check the target table(s)
-                tables = ast.table.map((tableRef: any) => {
-                    const tableName = tableRef.table;
-                    return tableName.includes('.') ? tableName.split('.')[1] : tableName;
-                });
-            } else {
-                // For SELECT/DELETE statements, check the from clause
-                tables = ast.from?.map((fromTable: any) => {
-                    const tableName = fromTable.table;
-                    return tableName.includes('.') ? tableName.split('.')[1] : tableName;
-                }) || [];
-            }
-
-            // Check if any table has RLS rules but no explicit rule for this action
-            const hasAuthorizedAccess = tables.some(table => {
-                const allowedActions = tablesWithRules[table];
-                
-                // First check if this table exists in our rules
-                if (allowedActions) {
-                    // If it has rules, verify this action is allowed
-                    const isAllowed = allowedActions.includes(statementType);
-
-                    if (!isAllowed) {
-                        throw new Error(`Unauthorized access: No matching rules for ${statementType} on restricted table`);
-                    }
-                } else {
-                    // If no rules apply for this table, then we should consider it authorized
-                    return {}
-                }
-                
-                // Check if this table exists in our policies at all
-                return Object.keys(tablesWithRules).includes(table);
-            });
-
-            if (!hasAuthorizedAccess) {
-                throw new Error(`Unauthorized access: No matching rules for ${statementType} on restricted table`);
-            }
-
-            // Apply matching rules for authorized tables
-            this.policies
-                .filter(policy => policy.action === statementType || policy.action === '*')
-                .forEach(({ action, condition }) => {
-                    const isTargetTable = tables.some(table => 
-                        table === condition.left.table
-                    );
-
-                    if (isTargetTable && action !== 'INSERT') {
-                        // Wrap the existing WHERE clause in parentheses if it exists
-                        const existingWhere = ast.where ? {
-                            type: 'expr_list',
-                            value: [ast.where],
-                            parentheses: true
-                        } : null;
-
-                        // Wrap the RLS condition in parentheses
-                        const rlsCondition = {
-                            type: 'expr_list',
-                            value: [condition],
-                            parentheses: true
-                        };
-
-                        if (existingWhere) {
-                            ast.where = {
-                                type: 'binary_expr',
-                                operator: 'AND',
-                                left: existingWhere,
-                                right: rlsCondition
-                            };
-                        } else {
-                            ast.where = rlsCondition;
-                        }
-                    } else if (action === 'INSERT') {
-                        if (ast.values && ast.values.length > 0) {
-                            const columnIndex = ast.columns.findIndex((col: any) => 
-                                col.toLowerCase() === condition.left.column.toLowerCase()
-                            );
-                            
-                            if (columnIndex !== -1) {
-                                // Replace the value in all value lists
-                                ast.values.forEach((valueList: any) => {
-                                    // Handle case where the value is an expr_list
-                                    if (valueList.type === 'expr_list' && Array.isArray(valueList.value)) {
-                                        valueList.value[columnIndex] = {
-                                            type: condition.right.type,
-                                            value: condition.right.value
-                                        };
-                                    } else {
-                                        // Direct value replacement
-                                        valueList[columnIndex] = {
-                                            type: condition.right.type,
-                                            value: condition.right.value
-                                        };
-                                    }
-                                });
-                            }
-                        }
-                    }
-                });
+        const statementType = ast.type?.toUpperCase();
+        if (!['SELECT', 'UPDATE', 'DELETE', 'INSERT'].includes(statementType)) {
+            return;
         }
 
-        // Handle JOIN subqueries
+        let tables: string[] = [];
+        if (statementType === 'INSERT') {
+            let tableName = this.normalizeIdentifier(ast.table[0].table);
+            if (tableName.includes('.')) {
+                tableName = tableName.split('.')[1];
+            }
+            tables = [tableName];
+        } else if (statementType === 'UPDATE') {
+            tables = ast.table.map((tableRef: any) => {
+                let tableName = this.normalizeIdentifier(tableRef.table);
+                if (tableName.includes('.')) {
+                    tableName = tableName.split('.')[1];
+                }
+                return tableName;
+            });
+        } else {
+            // SELECT or DELETE
+            tables = ast.from?.map((fromTable: any) => {
+                let tableName = this.normalizeIdentifier(fromTable.table);
+                if (tableName.includes('.')) {
+                    tableName = tableName.split('.')[1];
+                }
+                return tableName;
+            }) || [];
+        }
+
+        const restrictedTables = Object.keys(tablesWithRules);
+
+        for (const table of tables) {
+            if (restrictedTables.includes(table)) {
+                const allowedActions = tablesWithRules[table];
+                if (!allowedActions.includes(statementType)) {
+                    throw new Error(`Unauthorized access: No matching rules for ${statementType} on restricted table ${table}`);
+                }
+            }
+        }
+
+        this.policies
+            .filter(policy => policy.action === statementType || policy.action === '*')
+            .forEach(({ action, condition }) => {
+                const targetTable = this.normalizeIdentifier(condition.left.table);
+                const isTargetTable = tables.includes(targetTable);
+
+                if (!isTargetTable) return;
+
+                if (action !== 'INSERT') {
+                    // Add condition to WHERE with parentheses
+                    if (ast.where) {
+                        ast.where = {
+                            type: 'binary_expr',
+                            operator: 'AND',
+                            parentheses: true,
+                            left: {
+                                ...ast.where,
+                                parentheses: true
+                            },
+                            right: {
+                                ...condition,
+                                parentheses: true
+                            }
+                        };
+                    } else {
+                        ast.where = {
+                            ...condition,
+                            parentheses: true
+                        };
+                    }
+                } else {
+                    // For INSERT, enforce column values
+                    if (ast.values && ast.values.length > 0) {
+                        const columnIndex = ast.columns.findIndex((col: any) => 
+                            this.normalizeIdentifier(col) === this.normalizeIdentifier(condition.left.column)
+                        );
+                        if (columnIndex !== -1) {
+                            ast.values.forEach((valueList: any) => {
+                                if (valueList.type === 'expr_list' && Array.isArray(valueList.value)) {
+                                    valueList.value[columnIndex] = {
+                                        type: condition.right.type,
+                                        value: condition.right.value
+                                    };
+                                } else {
+                                    valueList[columnIndex] = {
+                                        type: condition.right.type,
+                                        value: condition.right.value
+                                    };
+                                }
+                            });
+                        }
+                    }
+                }
+            });
+
         ast.from?.forEach((fromItem: any) => {
             if (fromItem.expr && fromItem.expr.type === 'select') {
                 this.applyRLSToAst(fromItem.expr);
             }
             
+            // Handle both single join and array of joins
             if (fromItem.join) {
-                fromItem.join?.forEach((joinItem: any) => {
+                const joins = Array.isArray(fromItem.join) ? fromItem.join : [fromItem];
+                joins.forEach((joinItem: any) => {
                     if (joinItem.expr && joinItem.expr.type === 'select') {
                         this.applyRLSToAst(joinItem.expr);
                     }
@@ -336,12 +333,10 @@ export default class RLSEntrypoint extends WorkerEntrypoint<Env> {
             }
         });
 
-        // Handle subqueries in WHERE clause
         if (ast.where) {
             this.traverseWhere(ast.where);
         }
 
-        // Handle subqueries in SELECT clause
         ast.columns?.forEach((column: any) => {
             if (column.expr && column.expr.type === 'select') {
                 this.applyRLSToAst(column.expr);

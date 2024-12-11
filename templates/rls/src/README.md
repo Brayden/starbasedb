@@ -44,7 +44,7 @@ X/? Outcome: Automatically overrides '1' value for the current users ID
 
 Basic Unauthorized UPDATE Query	
 `UPDATE todos SET text = 'Updated Task' WHERE id = 1;`
-X Outcome: Returns as success but didn't actually update the value
+X/? Outcome: Returns as success but didn't actually update the value
 -> Expected: Should return an unuathorized error
 
 Basic Authorized UPDATE Query	
@@ -85,7 +85,8 @@ Unrelated Table Query
 
 JOIN Query	
 `SELECT todos.text, users.name FROM todos INNER JOIN users ON todos.user_id = users.id;`
-XXXXX = Error executing, check RLS module
+-> Outcome: Results that match only the user_id
+-> Expected: Results that match only the user_id
 
 Subquery	
 `SELECT * FROM todos WHERE id IN (SELECT id FROM todos WHERE user_id = '123');`
@@ -94,12 +95,13 @@ Subquery
 
 CTE Query	
 `WITH cte AS (SELECT * FROM todos WHERE user_id = '123') SELECT * FROM cte;`
-XXXXX = FAIL!
--> Outcome: Returns a result for user_id '123'
+-> Outcome: Returns no results since we are not user_id '123'
 -> Expected: Should not return any results for users that are not of current ID
 
 Empty Table Query	
-`SELECT * FROM todos WHERE user_id = '999';`
+`SELECT * FROM todos WHERE user_id = '123';`
+-> Outcome: No results returned
+-> Expected: No results returned
 
 Ambiguous Columns Query	
 `SELECT user_id FROM todos, users WHERE todos.user_id = users.id;`
@@ -111,27 +113,40 @@ INSERT INTO todos (user_id, text) VALUES ('123', 'New Task');
 UPDATE todos SET text = 'Updated Task' WHERE id = 1;
 DELETE FROM todos WHERE id = 1;
 ```
+-> Outcome: No results, referenced rows not affected, new row inserted
+-> Expected: No results, referenced rows not affected, new row inserted
 
 Syntax Error	
 `SELECT FROM todos WHERE ;`
+-> Outcome: Error
+-> Expected: Error
 
 Unsupported Dialect	
 `Use SQL in a dialect that your implementation doesn’t support (e.g., MySQL with proprietary syntax).`
 
 Missing Context Value	
 `SELECT * FROM todos WHERE user_id = context.id();`
+----> Currently fails. Should you have to declare a rule to be able to use context.id()? It only exists as a thing in our RLS plugin currently.
 
 Large Dataset Query	
 `SELECT * FROM todos;`
+-> Outcome: Returns all todos
+-> Expected: Returns all todos
 
 High Concurrency	
 `Simulate multiple concurrent queries (use the same SELECT * FROM todos; query).`
+-> Outcome: Returns one set of results scoped to the current user ID
+-> Expected: Returns one set of results scoped to the current user ID
 
 SQL Injection	
 `SELECT * FROM todos WHERE user_id = '123; DROP TABLE todos; --';`
+-> Outcome: Returns an empty data set
+-> Expected: Returns an empty data set
 
 SQLite-Specific Query	
 `SELECT name FROM sqlite_master WHERE type='table';`
+-- We should automatically include this into rules table as a pre-saved INSERT statement somehow
 
 PostgreSQL-Specific Query	
 `SELECT * FROM information_schema.tables WHERE table_schema = 'public';`
+-- We should automatically include this into rules table as a pre-saved INSERT statement somehow
