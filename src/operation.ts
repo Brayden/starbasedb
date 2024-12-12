@@ -134,13 +134,14 @@ export async function executeQuery(sql: string, params: any | undefined, isRaw: 
         return []
     }
 
+    const { sql: updatedSQL, params: updatedParams } = await beforeQuery(sql, params, dataSource, env)
+
     // If a cached version of this query request exists, this function will fetch the cached results.
-    const cache = await beforeQueryCache(sql, params, dataSource)
+    const cache = await beforeQueryCache(updatedSQL, updatedParams, dataSource)
     if (cache) {
         return cache
     }
 
-    const { sql: updatedSQL, params: updatedParams } = await beforeQuery(sql, params, dataSource, env)
     let response;
 
     if (dataSource.source === 'internal') {
