@@ -37,7 +37,7 @@ if ! command -v git &> /dev/null; then
 fi
 
 echo "Cloning the repository..."
-git clone https://github.com/Brayden/starbasedb.git > /dev/null 2>&1 || { echo "Error: Failed to clone the repository. Please check your internet connection and try again."; exit 1; }
+git clone https://github.com/outerbase/starbasedb.git > /dev/null 2>&1 || { echo "Error: Failed to clone the repository. Please check your internet connection and try again."; exit 1; }
 cd starbasedb || { echo "Error: Failed to change to the starbasedb directory. The clone might have failed."; exit 1; }
 
 # Step 3: Generate a secure AUTHORIZATION_TOKEN and update wrangler.toml

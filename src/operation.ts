@@ -8,6 +8,9 @@ import { CloudflareD1Connection, MongoDBConnection, MySQLConnection, PostgreSQLC
 import { DataSource, Source } from './types';
 import { Env } from './'
 import { MongoClient } from 'mongodb';
+import { afterQueryCache, beforeQueryCache } from './cache';
+
+let globalConnection: any = null;
 
 export type OperationQueueItem = {
     queries: { sql: string; params?: any[] }[];
@@ -59,7 +62,7 @@ async function afterQuery(sql: string, result: any, isRaw: boolean, dataSource?:
     result = isRaw ? transformRawResults(result, 'from') : result;
 
     // ## DO NOT REMOVE: POST QUERY HOOK ##
-    
+
     return isRaw ? transformRawResults(result, 'to') : result;
 }
 
@@ -145,6 +148,13 @@ export async function executeQuery(sql: string, params: any | undefined, isRaw: 
     }
 
     const { sql: updatedSQL, params: updatedParams } = await beforeQuery(sql, params, dataSource, env)
+
+    // If a cached version of this query request exists, this function will fetch the cached results.
+    const cache = await beforeQueryCache(updatedSQL, updatedParams, dataSource)
+    if (cache) {
+        return cache
+    }
+
     let response;
 
     if (dataSource.source === 'internal') {
@@ -152,6 +162,9 @@ export async function executeQuery(sql: string, params: any | undefined, isRaw: 
     } else {
         response = await executeExternalQuery(updatedSQL, updatedParams, isRaw, dataSource, env);
     }
+
+    // If this is a cacheable query, this function will handle that logic.
+    await afterQueryCache(sql, updatedParams, response, dataSource)
 
     return await afterQuery(updatedSQL, response, isRaw, dataSource, env);
 }
@@ -261,30 +274,31 @@ export async function executeSDKQuery(sql: string, params: any | undefined, isRa
         return []
     }
     
-    let db;
-    
-    if (env?.EXTERNAL_DB_TYPE === 'postgres') {
-        const { database } = await createSDKPostgresConnection(env)
-        db = database
-    } else if (env?.EXTERNAL_DB_TYPE === 'mysql' && env) {
-        const { database } = await createSDKMySQLConnection(env)
-        db = database
-    } else if (env?.EXTERNAL_DB_TYPE === 'mongo' && env) {
-        const { database } = await createSDKMongoConnection(env)
-        db = database
-    } else if (env?.EXTERNAL_DB_TYPE === 'sqlite' && env?.EXTERNAL_DB_CLOUDFLARE_API_KEY && env) {
-        const { database } = await createSDKCloudflareConnection(env)
-        db = database
-    } else if (env?.EXTERNAL_DB_TYPE === 'sqlite' && env?.EXTERNAL_DB_STARBASEDB_URI && env) {
-        const { database } = await createSDKStarbaseConnection(env)
-        db = database
-    } else if (env?.EXTERNAL_DB_TYPE === 'sqlite' && env?.EXTERNAL_DB_TURSO_URI && env) {
-        const { database } = await createSDKTursoConnection(env)
-        db = database
+    // Initialize connection if it doesn't exist
+    if (!globalConnection) {
+        if (env?.EXTERNAL_DB_TYPE === 'postgres') {
+            const { database } = await createSDKPostgresConnection(env)
+            globalConnection = database;
+        } else if (env?.EXTERNAL_DB_TYPE === 'mysql' && env) {
+            const { database } = await createSDKMySQLConnection(env)
+            globalConnection = database;
+        } else if (env?.EXTERNAL_DB_TYPE === 'mongo' && env) {
+            const { database } = await createSDKMongoConnection(env)
+            globalConnection = database;
+        } else if (env?.EXTERNAL_DB_TYPE === 'sqlite' && env?.EXTERNAL_DB_CLOUDFLARE_API_KEY && env) {
+            const { database } = await createSDKCloudflareConnection(env)
+            globalConnection = database;
+        } else if (env?.EXTERNAL_DB_TYPE === 'sqlite' && env?.EXTERNAL_DB_STARBASEDB_URI && env) {
+            const { database } = await createSDKStarbaseConnection(env)
+            globalConnection = database;
+        } else if (env?.EXTERNAL_DB_TYPE === 'sqlite' && env?.EXTERNAL_DB_TURSO_URI && env) {
+            const { database } = await createSDKTursoConnection(env)
+            globalConnection = database;
+        }
+        
+        await globalConnection.connect();
     }
 
-    await db.connect();
-    const { data } = await db.raw(sql, params);
-    
+    const { data } = await globalConnection.raw(sql, params);
     return data;
 }
