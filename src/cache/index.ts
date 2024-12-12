@@ -33,15 +33,17 @@ function hasModifyingStatement(ast: any): boolean {
             }
         }
     }
+    
     return false;
 }
 
 export async function beforeQueryCache(sql: string, params?: any[], dataSource?: DataSource): Promise<any | null> {
+    // Currently we do not support caching queries that have dynamic parameters
+    if (params?.length) return null
+
     let ast = parser.astify(sql);
 
     if (!hasModifyingStatement(ast) && dataSource?.source === Source.external && dataSource?.request.headers.has('X-Starbase-Cache')) {
-        // Currently we do not support caching queries that have dynamic parameters
-        if (params?.length) return null
         await createCacheTable(dataSource)
         const fetchCacheStatement = `SELECT timestamp, ttl, query, results FROM tmp_cache WHERE query = ?`
         const result = await dataSource.internalConnection?.durableObject.executeQuery(fetchCacheStatement, [sql], false) as any[];
@@ -61,7 +63,10 @@ export async function beforeQueryCache(sql: string, params?: any[], dataSource?:
 
 // Serialized RPC arguemnts are limited to 1MiB in size at the moment for Cloudflare
 // Workers. An error may occur if we attempt to cache a value result that is greater
-// than that size but putting this here to disclose these restrictions.
+// than that size but putting this here to disclose these restrictions. Potential optimizations
+// to look into include using Cloudflare Cache but need to find a good way to cache the
+// response in a safe way for our use case. Another option is another service for queues
+// or another way to ingest it directly to the Durable Object.
 export async function afterQueryCache(sql: string, params: any[] | undefined, result: any, dataSource?: DataSource) {
     // Currently we do not support caching queries that have dynamic parameters
     if (params?.length) return;
