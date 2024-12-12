@@ -114,7 +114,11 @@ export default {
                     outerbaseApiKey: env.OUTERBASE_API_KEY ?? ''
                 }
             };
+            
+            // Non-blocking operation to remove expired cache entries from our DO
+            expireCache(dataSource)
 
+            // Return the final response to our user
             return await new Handler().handle(request, dataSource, env);
         } catch (error) {
             // Return error response to client
@@ -124,5 +128,16 @@ export default {
                 400
             );
         }
-	},
+
+        function expireCache(dataSource: DataSource) {
+            ctx.waitUntil((async () => {
+                try {
+                    const cleanupSQL = `DELETE FROM tmp_cache WHERE timestamp + (ttl * 1000) < ?`;
+                    await dataSource.internalConnection?.durableObject.executeQuery(cleanupSQL, [Date.now()], false);
+                } catch (err) {
+                    console.error('Error cleaning up expired cache entries:', err);
+                }
+            })());
+        }
+	}
 } satisfies ExportedHandler<Env>;
