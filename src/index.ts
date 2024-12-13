@@ -106,11 +106,7 @@ export default {
                     if ((!env.AUTH_JWT_SECRET && !env.AUTH_JWKS_ENDPOINT)  || authorizationWithoutBearer === undefined) {
                         return createResponse(undefined, 'Unauthorized request', 400)
                     }
-
-                    // Decode to receive the JWT values but this does not verify the signer was authentic,
-                    // that should come in the next step to only allow valid signed JWTs.
-                    // const { payload } = await jwt.decode(authorizationWithoutBearer) as any  
-
+                    
                     if (env.AUTH_JWKS_ENDPOINT && env?.AUTH_ALGORITHM) {
                         try {
                             const JWKS = createRemoteJWKSet(new URL(env.AUTH_JWKS_ENDPOINT));
