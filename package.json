@@ -17,10 +17,10 @@
   "dependencies": {
     "@libsql/client": "^0.14.0",
     "@outerbase/sdk": "2.0.0-rc.3",
-    "@tsndr/cloudflare-worker-jwt": "^3.1.3",
+    "jose": "^5.9.6",
     "mongodb": "^6.11.0",
     "mysql2": "^3.11.4",
-    "pg": "^8.13.1",
-    "node-sql-parser": "^4.18.0"
+    "node-sql-parser": "^4.18.0",
+    "pg": "^8.13.1"
   }
 }

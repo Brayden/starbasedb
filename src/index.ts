@@ -4,19 +4,22 @@ import { Handler } from "./handler";
 import { DatabaseStub, DataSource, RegionLocationHint, Source } from './types';
 import { corsPreflight } from './cors';
 export { DatabaseDurableObject } from './do'; 
-
-import jwt from "@tsndr/cloudflare-worker-jwt"
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const DURABLE_OBJECT_ID = 'sql-durable-object';
 
 export interface Env {
-    AUTHORIZATION_TOKEN: string;
+    ADMIN_AUTHORIZATION_TOKEN: string;
+    CLIENT_AUTHORIZATION_TOKEN: string;
     DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
     REGION: string;
   
     // Studio credentials
     STUDIO_USER?: string;
     STUDIO_PASS?: string;
+
+    ENABLE_ALLOWLIST?: boolean;
+    ENABLE_RLS?: boolean;
   
     // External database source details
     OUTERBASE_API_KEY?: string;
@@ -37,15 +40,11 @@ export interface Env {
     EXTERNAL_DB_CLOUDFLARE_ACCOUNT_ID?: string;
     EXTERNAL_DB_CLOUDFLARE_DATABASE_ID?: string;
 
+    AUTH_ALGORITHM?: string;
     AUTH_JWT_SECRET?: string;
+    AUTH_JWKS_ENDPOINT?: string;
   
     // ## DO NOT REMOVE: TEMPLATE INTERFACE ##
-    ALLOWLIST: {
-        isQueryAllowed(sql: string): Promise<boolean | Error>;
-    },
-    RLS: {
-        applyRLS(sql: string, context?: Record<string, any>, dialect?: string): Promise<string | Error>
-    }
 }
 
 export default {
@@ -83,7 +82,7 @@ export default {
                 return handleStudioRequest(request, {
                     username: env.STUDIO_USER,
                     password: env.STUDIO_PASS, 
-                    apiToken: env.AUTHORIZATION_TOKEN
+                    apiToken: env.ADMIN_AUTHORIZATION_TOKEN
                 });
             }
 
@@ -99,20 +98,35 @@ export default {
                 // incoming request as verified. If this does not match then we next want to check
                 // if the `Authorization` header contains a JWT session token we can verify before
                 // allowing the user to proceed to our request handler.
-                if (authorizationValue !== `Bearer ${env.AUTHORIZATION_TOKEN}`) {
+                if (authorizationValue !== `Bearer ${env.ADMIN_AUTHORIZATION_TOKEN}` && authorizationValue !== `Bearer ${env.CLIENT_AUTHORIZATION_TOKEN}`) {
                     const authorizationWithoutBearer = authorizationValue?.replace('Bearer ', '');
 
-                    if (!env.AUTH_JWT_SECRET || authorizationWithoutBearer === undefined) {
+                    // If the above case failed (no admin or client token) and you're not using JWT authentication
+                    // then we will just fail overall. Some form of Authorization is required to proceed.
+                    if ((!env.AUTH_JWT_SECRET && !env.AUTH_JWKS_ENDPOINT)  || authorizationWithoutBearer === undefined) {
                         return createResponse(undefined, 'Unauthorized request', 400)
                     }
 
-                    const { payload } = await jwt.decode(authorizationWithoutBearer) as any  
-                    // const verifiedPayload = await jwt.verify(authorizationWithoutBearer, env?.AUTH_JWT_SECRET) as any
-                    
-                    if (!payload.sub) {
-                        return createResponse(undefined, 'Unauthorized request', 401)
-                    } else {
-                        jwtPayload = payload;
+                    // Decode to receive the JWT values but this does not verify the signer was authentic,
+                    // that should come in the next step to only allow valid signed JWTs.
+                    // const { payload } = await jwt.decode(authorizationWithoutBearer) as any  
+
+                    if (env.AUTH_JWKS_ENDPOINT && env?.AUTH_ALGORITHM) {
+                        try {
+                            const JWKS = createRemoteJWKSet(new URL(env.AUTH_JWKS_ENDPOINT));
+                            const { payload } = await jwtVerify(authorizationWithoutBearer, JWKS, {
+                                algorithms: [env?.AUTH_ALGORITHM],
+                            });
+
+                            if (!payload.sub) {
+                                return createResponse(undefined, 'Unauthorized request', 401)
+                            } else {
+                                jwtPayload = payload;
+                            }
+                        } catch (error: any) {
+                            console.error("JWT Verification failed: ", error.message);
+                            throw new Error("JWT verification failed");
+                        }
                     }
                 }
             } else if (isWebSocket) {
@@ -122,7 +136,7 @@ export default {
                  */
                 const token = url.searchParams.get('token');
 
-                if (token !== env.AUTHORIZATION_TOKEN) {
+                if (token !== env.ADMIN_AUTHORIZATION_TOKEN && token !== env.CLIENT_AUTHORIZATION_TOKEN) {
                     return new Response('WebSocket connections are not supported at this endpoint.', { status: 440 });
                 }
             }

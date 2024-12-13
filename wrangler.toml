@@ -7,15 +7,6 @@ compatibility_flags = ["nodejs_compat_v2"]
 
 # Service Bindings
 ## DO NOT REMOVE: TEMPLATE SERVICES ##
-[[services]]
-binding = "ALLOWLIST"
-service = "starbasedb_allowlist_queries"
-entrypoint = "AllowlistQueriesEntrypoint"
-
-[[services]]
-binding = "RLS"
-service = "starbasedb_rls"
-entrypoint = "RLSEntrypoint"
 
 # Workers Logs
 # Docs: https://developers.cloudflare.com/workers/observability/logs/workers-logs/
@@ -37,13 +28,23 @@ tag = "v1"
 new_sqlite_classes = ["DatabaseDurableObject"]
 
 [vars]
-AUTHORIZATION_TOKEN = "ABC123"
+# Use this in your Authorization header for full database access
+ADMIN_AUTHORIZATION_TOKEN = "ABC123"
+
+# Use this in your Authorization header for a user role with rules applied
+CLIENT_AUTHORIZATION_TOKEN = "DEF456"
+
+# Deploy the Durable Object in a specific region, default is "auto" or location near first request
 REGION = "auto"
 
 # Uncomment the section below to create a user for logging into your database UI.
 # You can access the Studio UI at: https://your_endpoint/studio
 STUDIO_USER = "admin"
 STUDIO_PASS = "123456"
+
+# Toggle to enable default features 
+ENABLE_ALLOWLIST = 1
+ENABLE_RLS = 1
 
 # External database source details
 # This enables Starbase to connect to an external data source
@@ -65,4 +66,5 @@ EXTERNAL_DB_TYPE = "postgres"
 # EXTERNAL_DB_CLOUDFLARE_ACCOUNT_ID = ""
 # EXTERNAL_DB_CLOUDFLARE_DATABASE_ID = ""
 
-AUTH_JWT_SECRET = ""
+AUTH_ALGORITHM = "RS256"
+AUTH_JWKS_ENDPOINT = ""
