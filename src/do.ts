@@ -24,6 +24,38 @@ export class DatabaseDurableObject extends DurableObject {
         super(ctx, env);
         this.sql = ctx.storage.sql;
         this.storage = ctx.storage;
+
+        // Install default necessary `tmp_` tables for various features here.
+        const cacheStatement = `
+        CREATE TABLE IF NOT EXISTS tmp_cache (
+            "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+            "timestamp" REAL NOT NULL,
+            "ttl" INTEGER NOT NULL,
+            "query" TEXT UNIQUE NOT NULL,
+            "results" TEXT
+        );`
+
+        const allowlistStatement = `
+        CREATE TABLE IF NOT EXISTS tmp_allowlist_queries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sql_statement TEXT NOT NULL
+        )`
+
+        const rlsStatement = `
+        CREATE TABLE IF NOT EXISTS tmp_rls_policies (
+            "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+            "actions" TEXT NOT NULL CHECK(actions IN ('SELECT', 'UPDATE', 'INSERT', 'DELETE')),
+            "schema" TEXT,
+            "table" TEXT NOT NULL,
+            "column" TEXT NOT NULL,
+            "value" TEXT NOT NULL,
+            "value_type" TEXT NOT NULL DEFAULT 'string',
+            "operator" TEXT DEFAULT '='
+        )`
+
+        this.executeQuery(cacheStatement, undefined, false)
+        this.executeQuery(allowlistStatement, undefined, false)
+        this.executeQuery(rlsStatement, undefined, false)
     }
 
     /**

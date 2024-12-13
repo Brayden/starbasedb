@@ -1,20 +1,6 @@
 import { DataSource, Source } from "../types";
 const parser = new (require('node-sql-parser').Parser)();
 
-async function createCacheTable(dataSource?: DataSource) {
-    const statement = `
-    CREATE TABLE IF NOT EXISTS "main"."tmp_cache"(
-        "id" INTEGER PRIMARY KEY AUTOINCREMENT,
-        "timestamp" REAL NOT NULL,
-        "ttl" INTEGER NOT NULL,
-        "query" TEXT UNIQUE NOT NULL,
-        "results" TEXT
-    );
-    `
-
-    await dataSource?.internalConnection?.durableObject.executeQuery(statement, undefined, false)
-}
-
 function hasModifyingStatement(ast: any): boolean {
     // Check if current node is a modifying statement
     if (ast.type && ['insert', 'update', 'delete'].includes(ast.type.toLowerCase())) {
@@ -33,28 +19,30 @@ function hasModifyingStatement(ast: any): boolean {
             }
         }
     }
-    
+
     return false;
 }
 
-export async function beforeQueryCache(sql: string, params?: any[], dataSource?: DataSource): Promise<any | null> {
+export async function beforeQueryCache(sql: string, params?: any[], dataSource?: DataSource, dialect?: string): Promise<any | null> {
     // Currently we do not support caching queries that have dynamic parameters
     if (params?.length) return null
+    if (dataSource?.source === Source.internal || !dataSource?.request.headers.has('X-Starbase-Cache')) return null
 
-    let ast = parser.astify(sql);
+    if (!dialect) dialect = 'sqlite'
+    if (dialect.toLowerCase() === 'postgres') dialect = 'postgresql'
 
-    if (!hasModifyingStatement(ast) && dataSource?.source === Source.external && dataSource?.request.headers.has('X-Starbase-Cache')) {
-        await createCacheTable(dataSource)
-        const fetchCacheStatement = `SELECT timestamp, ttl, query, results FROM tmp_cache WHERE query = ?`
-        const result = await dataSource.internalConnection?.durableObject.executeQuery(fetchCacheStatement, [sql], false) as any[];
+    let ast = parser.astify(sql, { database: dialect });
+    if (hasModifyingStatement(ast)) return null
+    
+    const fetchCacheStatement = `SELECT timestamp, ttl, query, results FROM tmp_cache WHERE query = ?`
+    const result = await dataSource.internalConnection?.durableObject.executeQuery(fetchCacheStatement, [sql], false) as any[];
 
-        if (result?.length) {
-            const { timestamp, ttl, results } = result[0];
-            const expirationTime = new Date(timestamp).getTime() + (ttl * 1000);
-            
-            if (Date.now() < expirationTime) {
-                return JSON.parse(results)
-            }
+    if (result?.length) {
+        const { timestamp, ttl, results } = result[0];
+        const expirationTime = new Date(timestamp).getTime() + (ttl * 1000);
+        
+        if (Date.now() < expirationTime) {
+            return JSON.parse(results)
         }
     }
 
@@ -67,16 +55,19 @@ export async function beforeQueryCache(sql: string, params?: any[], dataSource?:
 // to look into include using Cloudflare Cache but need to find a good way to cache the
 // response in a safe way for our use case. Another option is another service for queues
 // or another way to ingest it directly to the Durable Object.
-export async function afterQueryCache(sql: string, params: any[] | undefined, result: any, dataSource?: DataSource) {
+export async function afterQueryCache(sql: string, params: any[] | undefined, result: any, dataSource?: DataSource, dialect?: string) {
     // Currently we do not support caching queries that have dynamic parameters
     if (params?.length) return;
+    if (dataSource?.source === Source.internal || !dataSource?.request.headers.has('X-Starbase-Cache')) return null
 
     try {
-        let ast = parser.astify(sql);
+        if (!dialect) dialect = 'sqlite'
+        if (dialect.toLowerCase() === 'postgres') dialect = 'postgresql'
+
+        let ast = parser.astify(sql, { database: dialect });
         
         // If any modifying query exists within our SQL statement then we shouldn't proceed
-        if (hasModifyingStatement(ast) ||
-            !(dataSource?.source === Source.external && dataSource?.request.headers.has('X-Starbase-Cache'))) return;
+        if (hasModifyingStatement(ast)) return;
 
         const timestamp = Date.now();
         const results = JSON.stringify(result);

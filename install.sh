@@ -40,7 +40,7 @@ echo "Cloning the repository..."
 git clone https://github.com/outerbase/starbasedb.git > /dev/null 2>&1 || { echo "Error: Failed to clone the repository. Please check your internet connection and try again."; exit 1; }
 cd starbasedb || { echo "Error: Failed to change to the starbasedb directory. The clone might have failed."; exit 1; }
 
-# Step 3: Generate a secure AUTHORIZATION_TOKEN and update wrangler.toml
+# Step 3: Generate a secure ADMIN_AUTHORIZATION_TOKEN and update wrangler.toml
 os=$(uname -s)
 PLATFORM_SED="sed -i ''"
 
@@ -64,8 +64,8 @@ case "$os" in
         ;;
 esac
 
-AUTHORIZATION_TOKEN=$(openssl rand -hex 16)
-$PLATFORM_SED "s/AUTHORIZATION_TOKEN = \"[^\"]*\"/AUTHORIZATION_TOKEN = \"$AUTHORIZATION_TOKEN\"/" wrangler.toml
+ADMIN_AUTHORIZATION_TOKEN=$(openssl rand -hex 16)
+$PLATFORM_SED "s/ADMIN_AUTHORIZATION_TOKEN = \"[^\"]*\"/ADMIN_AUTHORIZATION_TOKEN = \"$ADMIN_AUTHORIZATION_TOKEN\"/" wrangler.toml
 
 # Step 4: Prompt the user for Cloudflare account_id (force interaction)
 echo " "

@@ -99,7 +99,7 @@ export class Handler {
             }
     
             const { sql, params, transaction } = await request.json() as QueryRequest & QueryTransactionRequest;
-
+            
             if (Array.isArray(transaction) && transaction.length) {
                 const queries = transaction.map((queryObj: any) => {
                     const { sql, params } = queryObj;
@@ -125,7 +125,7 @@ export class Handler {
             return createResponse(response, undefined, 200);
         } catch (error: any) {
             console.error('Query Route Error:', error);
-            return createResponse(undefined, error || 'An unexpected error occurred.', 500);
+            return createResponse(undefined, error?.message || 'An unexpected error occurred.', 500);
         }
     }
 

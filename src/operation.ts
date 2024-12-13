@@ -5,10 +5,12 @@ import { createClient as createTursoConnection } from '@libsql/client/web';
 
 // Import how we interact with the databases through the Outerbase SDK
 import { CloudflareD1Connection, MongoDBConnection, MySQLConnection, PostgreSQLConnection, StarbaseConnection, TursoConnection } from '@outerbase/sdk';
-import { DataSource } from './types';
+import { DataSource, Source } from './types';
 import { Env } from './'
 import { MongoClient } from 'mongodb';
 import { afterQueryCache, beforeQueryCache } from './cache';
+import { isQueryAllowed } from './allowlist';
+import { applyRLS } from './rls';
 
 let globalConnection: any = null;
 
@@ -134,26 +136,44 @@ export async function executeQuery(sql: string, params: any | undefined, isRaw: 
         return []
     }
 
-    const { sql: updatedSQL, params: updatedParams } = await beforeQuery(sql, params, dataSource, env)
+    try {
+        // If the allowlist feature is enabled, we should verify the query is allowed before proceeding.
+        await isQueryAllowed(sql, env?.ENABLE_ALLOWLIST ?? false, dataSource, env)
 
-    // If a cached version of this query request exists, this function will fetch the cached results.
-    const cache = await beforeQueryCache(updatedSQL, updatedParams, dataSource)
-    if (cache) {
-        return cache
+        // If the row level security feature is enabled, we should apply our policies to this SQL statement.
+        sql = await applyRLS(sql, env?.ENABLE_RLS ?? false, env?.EXTERNAL_DB_TYPE, dataSource, env)
+        
+        // Run the beforeQuery hook for any third party logic to be applied before execution.
+        const { sql: updatedSQL, params: updatedParams } = await beforeQuery(sql, params, dataSource, env)
+
+        // If the query was modified by RLS then we determine it isn't currently a valid candidate
+        // for caching. In the future we will support queries impacted by RLS and caching their
+        // results.
+        if (!isRaw) {
+            // If a cached version of this query request exists, this function will fetch the cached results.
+            const cache = await beforeQueryCache(updatedSQL, updatedParams, dataSource, env?.EXTERNAL_DB_TYPE)
+            if (cache) {
+                return cache
+            }
+        }
+
+        let response;
+
+        if (dataSource.source === 'internal') {
+            response = await dataSource.internalConnection?.durableObject.executeQuery(updatedSQL, updatedParams, isRaw);
+        } else {
+            response = await executeExternalQuery(updatedSQL, updatedParams, isRaw, dataSource, env);
+        }
+
+        // If this is a cacheable query, this function will handle that logic.
+        if (!isRaw) {
+            await afterQueryCache(sql, updatedParams, response, dataSource)
+        }
+
+        return await afterQuery(updatedSQL, response, isRaw, dataSource, env);
+    } catch (error: any) {
+        throw new Error(error.message ?? 'An error occurred');
     }
-
-    let response;
-
-    if (dataSource.source === 'internal') {
-        response = await dataSource.internalConnection?.durableObject.executeQuery(updatedSQL, updatedParams, isRaw);
-    } else {
-        response = await executeExternalQuery(updatedSQL, updatedParams, isRaw, dataSource, env);
-    }
-
-    // If this is a cacheable query, this function will handle that logic.
-    await afterQueryCache(sql, updatedParams, response, dataSource)
-
-    return await afterQuery(updatedSQL, response, isRaw, dataSource, env);
 }
 
 export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<QueryResponse> {

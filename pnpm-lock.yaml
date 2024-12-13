@@ -11,6 +11,12 @@ dependencies:
   '@outerbase/sdk':
     specifier: 2.0.0-rc.3
     version: 2.0.0-rc.3
+  '@tsndr/cloudflare-worker-jwt':
+    specifier: ^3.1.3
+    version: 3.1.3
+  jose:
+    specifier: ^5.9.6
+    version: 5.9.6
   mongodb:
     specifier: ^6.11.0
     version: 6.11.0
@@ -467,6 +473,10 @@ packages:
       handlebars: 4.7.8
     dev: false
 
+  /@tsndr/cloudflare-worker-jwt@3.1.3:
+    resolution: {integrity: sha512-ohuQzCICeki6wBOtmyqk0JJyJvl4vE1/RgXModJzm2U3xfiFNbkXtpa2HHGiH9BG7Wd/G7mtu2xtJ1R8W6iP5w==}
+    dev: false
+
   /@types/node-forge@1.3.11:
     resolution: {integrity: sha512-FQx220y22OKNTqaByeBGqHWYz4cl94tpcxeFdvBo3wjG6XPBuZ0BNgNZRV5J5TFmmcsJ4IzsLkmGRiQbnYsBEQ==}
     dependencies:
@@ -786,6 +796,10 @@ packages:
 
   /is-property@1.0.2:
     resolution: {integrity: sha512-Ks/IoX00TtClbGQr4TWXemAnktAQvYB7HzcCxDGqEZU6oCmb2INHuOoKxbtR+HFkmYWBKv/dOZtGRiAjDhj92g==}
+    dev: false
+
+  /jose@5.9.6:
+    resolution: {integrity: sha512-AMlnetc9+CV9asI19zHmrgS/WYsWUwCn2R7RzlbJWD7F9eWYUTGyBmU9o6PxngtLGOiDGPRu+Uc4fhKzbpteZQ==}
     dev: false
 
   /js-base64@3.7.7:
