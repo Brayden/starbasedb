@@ -1,4 +1,4 @@
-import { DataSource } from "..";
+import { DataSource } from "../types";
 import { executeTransaction } from "../operation";
 
 export async function executeOperation(queries: { sql: string, params?: any[] }[], dataSource: DataSource): Promise<any> {

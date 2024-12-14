@@ -1,4 +1,4 @@
-import { Env } from "..";
+import { HandlerConfig } from "../handler";
 import { DataSource, Source } from "../types";
 
 const parser = new (require('node-sql-parser').Parser)();
@@ -111,14 +111,14 @@ async function loadPolicies(dataSource?: DataSource): Promise<Policy[]> {
     }
 }
 
-export async function applyRLS(sql: string, isEnabled: boolean, dialect?: string, dataSource?: DataSource, env?: Env): Promise<string> {
+export async function applyRLS(sql: string, isEnabled: boolean, dialect?: string, dataSource?: DataSource, config?: HandlerConfig): Promise<string> {
     if (!isEnabled) return sql;
     if (!sql) {
         throw Error('No SQL query found in RLS plugin.')
     }
 
     // Do not apply RLS rules to the admin user
-    if (dataSource?.request.headers.get('Authorization') === `Bearer ${env?.ADMIN_AUTHORIZATION_TOKEN}`) {
+    if (dataSource?.request.headers.get('Authorization') === `Bearer ${config?.adminAuthorizationToken}`) {
         return sql;
     }
 

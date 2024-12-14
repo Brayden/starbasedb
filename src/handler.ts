@@ -11,17 +11,45 @@ import { importDumpRoute } from "./import/dump";
 import { importTableFromJsonRoute } from "./import/json";
 import { importTableFromCsvRoute } from "./import/csv";
 
+export interface HandlerConfig {
+    adminAuthorizationToken: string;
+    outerbaseApiKey?: string;
+    enableAllowlist?: boolean;
+    enableRls?: boolean;
+
+    externalDbType?: string;
+
+    externalDbHost?: string;
+    externalDbPort?: number;
+    externalDbUser?: string;
+    externalDbPassword?: string;
+    externalDbName?: string;
+    externalDbDefaultSchema?: string;
+
+    externalDbMongodbUri?: string;
+
+    externalDbTursoUri?: string;
+    externalDbTursoToken?: string;
+
+    externalDbCloudflareApiKey?: string;
+    externalDbCloudflareAccountId?: string;
+    externalDbCloudflareDatabaseId?: string;
+
+    externalDbStarbaseUri?: string;
+    externalDbStarbaseToken?: string;
+}
+
 export class Handler {
     private liteREST?: LiteREST;
     private dataSource?: DataSource;
-    private env?: Env;
+    private config?: HandlerConfig;
 
     constructor() { }
 
-    public async handle(request: Request, dataSource: DataSource, env: Env): Promise<Response> {
+    public async handle(request: Request, dataSource: DataSource, config: HandlerConfig): Promise<Response> {
         this.dataSource = dataSource;
-        this.liteREST = new LiteREST(dataSource, env);
-        this.env = env;
+        this.liteREST = new LiteREST(dataSource, config);
+        this.config = config;
         const url = new URL(request.url);
 
         if (request.method === 'POST' && url.pathname === '/query/raw') {
@@ -113,7 +141,7 @@ export class Handler {
                     return { sql, params };
                 });
 
-                const response = await executeTransaction(queries, isRaw, this.dataSource, this.env);
+                const response = await executeTransaction(queries, isRaw, this.dataSource, this.config);
                 return createResponse(response, undefined, 200);
             } else if (typeof sql !== 'string' || !sql.trim()) {
                 return createResponse(undefined, 'Invalid or empty "sql" field.', 400);
@@ -121,7 +149,7 @@ export class Handler {
                 return createResponse(undefined, 'Invalid "params" field. Must be an array or object.', 400);
             }
 
-            const response = await executeQuery(sql, params, isRaw, this.dataSource, this.env);
+            const response = await executeQuery(sql, params, isRaw, this.dataSource, this.config);
             return createResponse(response, undefined, 200);
         } catch (error: any) {
             console.error('Query Route Error:', error);

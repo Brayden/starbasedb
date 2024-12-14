@@ -1,4 +1,4 @@
-import { Env } from "..";
+import { HandlerConfig } from "../handler";
 import { DataSource } from "../types";
 
 const parser = new (require('node-sql-parser').Parser)();
@@ -25,7 +25,7 @@ async function loadAllowlist(dataSource?: DataSource): Promise<string[]> {
     }
 }
 
-export async function isQueryAllowed(sql: string, isEnabled: boolean, dataSource?: DataSource, env?: Env): Promise<boolean | Error> {
+export async function isQueryAllowed(sql: string, isEnabled: boolean, dataSource?: DataSource, config?: HandlerConfig): Promise<boolean | Error> {
     // If the feature is not turned on then by default the query is allowed
     if (!isEnabled) return true;
 
@@ -33,7 +33,7 @@ export async function isQueryAllowed(sql: string, isEnabled: boolean, dataSource
     // We want database UI's to be able to have more free reign to run queries so we can load
     // tables, run queries, and more. If you want to block queries with the allowlist then we
     // advise you to do so by implementing user authentication with JWT.
-    if (dataSource?.request.headers.get('Authorization') === `Bearer ${env?.ADMIN_AUTHORIZATION_TOKEN}`) {
+    if (dataSource?.request.headers.get('Authorization') === `Bearer ${config?.adminAuthorizationToken}`) {
         return true;
     }
 

@@ -1,6 +1,6 @@
 import { createResponse } from '../utils';
 import { executeOperation } from '../export';
-import { DataSource } from '..';
+import { DataSource } from '../types';
 
 interface ColumnMapping {
     [key: string]: string;

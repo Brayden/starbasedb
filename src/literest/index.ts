@@ -1,18 +1,18 @@
 import { createResponse } from '../utils';
 import { DataSource, Source } from "../types";
 import { executeQuery, executeTransaction } from "../operation";
-import { Env } from "../index"
+import { HandlerConfig } from "../handler"
 
 export class LiteREST {
     private dataSource: DataSource;
-    private env: Env;
+    private config: HandlerConfig;
 
     constructor(
         dataSource: DataSource,
-        env: Env
+        config: HandlerConfig
     ) {
         this.dataSource = dataSource;
-        this.env = env;
+        this.config = config;
     }
 
     /**
@@ -33,7 +33,7 @@ export class LiteREST {
         let query = `PRAGMA table_info(${tableName});`;
     
         if (this.dataSource.source === Source.external) {
-            if (this.env.EXTERNAL_DB_TYPE?.toLowerCase() === "postgres") {
+            if (this.config.externalDbType?.toLowerCase() === "postgres") {
                 query = `
                     SELECT kcu.column_name AS name 
                     FROM information_schema.table_constraints tc 
@@ -44,7 +44,7 @@ export class LiteREST {
                     WHERE tc.constraint_type = 'PRIMARY KEY'
                     AND tc.table_name = '${tableName}' 
                     AND tc.table_schema = '${schemaName ?? 'public'}';`;
-            } else if (this.env.EXTERNAL_DB_TYPE?.toLowerCase() === "mysql") {
+            } else if (this.config.externalDbType?.toLowerCase() === "mysql") {
                 query = `
                     SELECT COLUMN_NAME AS name FROM information_schema.key_column_usage 
                     WHERE table_name = '${tableName}' 
@@ -54,8 +54,8 @@ export class LiteREST {
             }
         }
 
-        const isSQLite = this.dataSource.source === Source.internal || this.env.EXTERNAL_DB_TYPE?.toLowerCase() === 'sqlite'
-        const schemaInfo = (await executeQuery(query, this.dataSource.source === Source.external ? {} : [], false, this.dataSource, this.env)) as any[];
+        const isSQLite = this.dataSource.source === Source.internal || this.config.externalDbType?.toLowerCase() === 'sqlite'
+        const schemaInfo = (await executeQuery(query, this.dataSource.source === Source.external ? {} : [], false, this.dataSource, this.config)) as any[];
         
         let pkColumns = []
 
@@ -138,7 +138,7 @@ export class LiteREST {
      * @param queries - The operations to execute.
      */
     private async executeOperation(queries: { sql: string, params: any[] }[]): Promise<{ result?: any, error?: string | undefined, status: number }> {
-        const results: any[] = (await executeTransaction(queries, false, this.dataSource, this.env)) as any[];
+        const results: any[] = (await executeTransaction(queries, false, this.dataSource, this.config)) as any[];
         return { result: results?.length > 0 ? results[0] : undefined, status: 200 };
     }
 

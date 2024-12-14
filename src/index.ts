@@ -1,6 +1,6 @@
 import { createResponse } from './utils';
 import handleStudioRequest from "./studio";
-import { Handler } from "./handler";
+import { Handler, HandlerConfig } from "./handler";
 import { DatabaseStub, DataSource, RegionLocationHint, Source } from './types';
 import { corsPreflight } from './cors';
 export { DatabaseDurableObject } from './do'; 
@@ -163,8 +163,30 @@ export default {
             // Non-blocking operation to remove expired cache entries from our DO
             expireCache(dataSource)
 
+            const config = {
+                adminAuthorizationToken: env.ADMIN_AUTHORIZATION_TOKEN,
+                outerbaseApiKey: env.OUTERBASE_API_KEY,
+                enableAllowlist: env.ENABLE_ALLOWLIST,
+                enableRls: env.ENABLE_RLS,
+                externalDbType: env.EXTERNAL_DB_TYPE,
+                externalDbHost: env.EXTERNAL_DB_HOST,
+                externalDbPort: env.EXTERNAL_DB_PORT,
+                externalDbUser: env.EXTERNAL_DB_USER,
+                externalDbPassword: env.EXTERNAL_DB_PASS,
+                externalDbName: env.EXTERNAL_DB_DATABASE,
+                externalDbDefaultSchema: env.EXTERNAL_DB_DEFAULT_SCHEMA,
+                externalDbMongodbUri: env.EXTERNAL_DB_MONGODB_URI,
+                externalDbTursoUri: env.EXTERNAL_DB_TURSO_URI,
+                externalDbTursoToken: env.EXTERNAL_DB_TURSO_TOKEN,
+                externalDbCloudflareApiKey: env.EXTERNAL_DB_CLOUDFLARE_API_KEY,
+                externalDbCloudflareAccountId: env.EXTERNAL_DB_CLOUDFLARE_ACCOUNT_ID,
+                externalDbCloudflareDatabaseId: env.EXTERNAL_DB_CLOUDFLARE_DATABASE_ID,
+                externalDbStarbaseUri: env.EXTERNAL_DB_STARBASEDB_URI,
+                externalDbStarbaseToken: env.EXTERNAL_DB_STARBASEDB_TOKEN,
+            } satisfies HandlerConfig;
+
             // Return the final response to our user
-            return await new Handler().handle(request, dataSource, env);
+            return await new Handler().handle(request, dataSource, config);
         } catch (error) {
             // Return error response to client
             return createResponse(

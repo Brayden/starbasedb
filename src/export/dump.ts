@@ -1,5 +1,5 @@
 import { executeOperation } from '.';
-import { DataSource } from '..';
+import { DataSource } from '../types';
 import { createResponse } from '../utils';
 
 export async function dumpDatabaseRoute(
