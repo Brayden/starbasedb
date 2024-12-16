@@ -153,7 +153,7 @@ export class Handler {
 
     app.all("/api/*", async (c) => handleApiRequest(c.req.raw));
 
-    return createResponse(undefined, "Unknown operation", 400);
+    return app.fetch(request);
   }
 
   async queryRoute(request: Request, isRaw: boolean): Promise<Response> {
