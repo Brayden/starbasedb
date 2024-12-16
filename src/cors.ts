@@ -1,7 +1,7 @@
 export const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Starbase-Source',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Starbase-Source, X-Data-Source',
     'Access-Control-Max-Age': '86400',
 };
 
