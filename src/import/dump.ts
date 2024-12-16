@@ -1,5 +1,5 @@
 import { createResponse } from '../utils';
-import { DataSource } from '..';
+import { DataSource } from '../types';
 import { executeOperation } from '../export';
 
 function parseSqlStatements(sqlContent: string): string[] {

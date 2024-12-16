@@ -1,6 +1,6 @@
 import { getTableData, createExportResponse } from './index';
 import { createResponse } from '../utils';
-import { DataSource } from '..';
+import { DataSource } from '../types';
 
 export async function exportTableToJsonRoute(
     tableName: string,

@@ -6,7 +6,7 @@ import { createClient as createTursoConnection } from '@libsql/client/web';
 // Import how we interact with the databases through the Outerbase SDK
 import { CloudflareD1Connection, MongoDBConnection, MySQLConnection, PostgreSQLConnection, StarbaseConnection, TursoConnection } from '@outerbase/sdk';
 import { DataSource, Source } from './types';
-import { Env } from './'
+import { Handler, HandlerConfig } from './handler'
 import { MongoClient } from 'mongodb';
 import { afterQueryCache, beforeQueryCache } from './cache';
 import { isQueryAllowed } from './allowlist';
@@ -38,7 +38,7 @@ export type ConnectionDetails = {
     defaultSchema: string,
 }
 
-async function beforeQuery(sql: string, params?: any[], dataSource?: DataSource, env?: Env): Promise<{ sql: string, params?: any[] }> {
+async function beforeQuery(sql: string, params?: any[], dataSource?: DataSource, config?: HandlerConfig): Promise<{ sql: string, params?: any[] }> {
     // ## DO NOT REMOVE: PRE QUERY HOOK ##
     
     return {
@@ -47,7 +47,7 @@ async function beforeQuery(sql: string, params?: any[], dataSource?: DataSource,
     }
 }
 
-async function afterQuery(sql: string, result: any, isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<any> {
+async function afterQuery(sql: string, result: any, isRaw: boolean, dataSource?: DataSource, config?: HandlerConfig): Promise<any> {
     result = isRaw ? transformRawResults(result, 'from') : result;
 
     // ## DO NOT REMOVE: POST QUERY HOOK ##
@@ -91,14 +91,14 @@ function transformRawResults(result: any, direction: 'to' | 'from'): Record<stri
 // sources we recommend you connect your database to Outerbase and provide the bases API key for queries
 // to be made. Otherwise, for supported data sources such as Postgres, MySQL, D1, StarbaseDB, Turso and Mongo
 // we can connect to the database directly and remove the additional hop to the Outerbase API.
-async function executeExternalQuery(sql: string, params: any, isRaw: boolean, dataSource: DataSource, env?: Env): Promise<any> {
+async function executeExternalQuery(sql: string, params: any, isRaw: boolean, dataSource: DataSource, config?: HandlerConfig): Promise<any> {
     if (!dataSource.externalConnection) {
         throw new Error('External connection not found.');
     }
 
     // If not an Outerbase API request, forward to external database.
-    if (!env?.OUTERBASE_API_KEY) {
-        return await executeSDKQuery(sql, params, isRaw, dataSource, env);
+    if (!config?.outerbaseApiKey) {
+        return await executeSDKQuery(sql, params, isRaw, dataSource, config);
     }
 
     // Convert params from array to object if needed
@@ -130,7 +130,7 @@ async function executeExternalQuery(sql: string, params: any, isRaw: boolean, da
     return results.response.results?.items;
 }
 
-export async function executeQuery(sql: string, params: any | undefined, isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<QueryResponse> {
+export async function executeQuery(sql: string, params: any | undefined, isRaw: boolean, dataSource?: DataSource, config?: HandlerConfig): Promise<QueryResponse> {
     if (!dataSource) {
         console.error('Data source not found.')
         return []
@@ -138,20 +138,20 @@ export async function executeQuery(sql: string, params: any | undefined, isRaw: 
 
     try {
         // If the allowlist feature is enabled, we should verify the query is allowed before proceeding.
-        await isQueryAllowed(sql, env?.ENABLE_ALLOWLIST ?? false, dataSource, env)
+        await isQueryAllowed(sql, config?.enableAllowlist ?? false, dataSource, config)
 
         // If the row level security feature is enabled, we should apply our policies to this SQL statement.
-        sql = await applyRLS(sql, env?.ENABLE_RLS ?? false, env?.EXTERNAL_DB_TYPE, dataSource, env)
+        sql = await applyRLS(sql, config?.enableRls ?? false, config?.externalDbType, dataSource, config)
         
         // Run the beforeQuery hook for any third party logic to be applied before execution.
-        const { sql: updatedSQL, params: updatedParams } = await beforeQuery(sql, params, dataSource, env)
+        const { sql: updatedSQL, params: updatedParams } = await beforeQuery(sql, params, dataSource, config)
 
         // If the query was modified by RLS then we determine it isn't currently a valid candidate
         // for caching. In the future we will support queries impacted by RLS and caching their
         // results.
         if (!isRaw) {
             // If a cached version of this query request exists, this function will fetch the cached results.
-            const cache = await beforeQueryCache(updatedSQL, updatedParams, dataSource, env?.EXTERNAL_DB_TYPE)
+            const cache = await beforeQueryCache(updatedSQL, updatedParams, dataSource, config?.externalDbType)
             if (cache) {
                 return cache
             }
@@ -162,7 +162,7 @@ export async function executeQuery(sql: string, params: any | undefined, isRaw: 
         if (dataSource.source === 'internal') {
             response = await dataSource.internalConnection?.durableObject.executeQuery(updatedSQL, updatedParams, isRaw);
         } else {
-            response = await executeExternalQuery(updatedSQL, updatedParams, isRaw, dataSource, env);
+            response = await executeExternalQuery(updatedSQL, updatedParams, isRaw, dataSource, config);
         }
 
         // If this is a cacheable query, this function will handle that logic.
@@ -170,13 +170,13 @@ export async function executeQuery(sql: string, params: any | undefined, isRaw: 
             await afterQueryCache(sql, updatedParams, response, dataSource)
         }
 
-        return await afterQuery(updatedSQL, response, isRaw, dataSource, env);
+        return await afterQuery(updatedSQL, response, isRaw, dataSource, config);
     } catch (error: any) {
         throw new Error(error.message ?? 'An error occurred');
     }
 }
 
-export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<QueryResponse> {
+export async function executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean, dataSource?: DataSource, config?: HandlerConfig): Promise<QueryResponse> {
     if (!dataSource) {
         console.error('Data source not found.')
         return []
@@ -185,97 +185,97 @@ export async function executeTransaction(queries: { sql: string; params?: any[] 
     const results = [];
 
     for (const query of queries) {
-        const result = await executeQuery(query.sql, query.params, isRaw, dataSource, env);
+        const result = await executeQuery(query.sql, query.params, isRaw, dataSource, config);
         results.push(result);
     }
     
     return results;
 }
 
-async function createSDKPostgresConnection(env: Env): Promise<ConnectionDetails> {
+async function createSDKPostgresConnection(config: HandlerConfig): Promise<ConnectionDetails> {
     const client = new PostgreSQLConnection(
         new PgClient({
-            host: env.EXTERNAL_DB_HOST,
-            port: Number(env.EXTERNAL_DB_PORT),
-            user: env.EXTERNAL_DB_USER,
-            password: env.EXTERNAL_DB_PASS,
-            database: env.EXTERNAL_DB_DATABASE
+            host: config.externalDbHost,
+            port: Number(config.externalDbPort),
+            user: config.externalDbUser,
+            password: config.externalDbPassword,
+            database: config.externalDbName,
         })
     );
 
     return {
         database: client,
-        defaultSchema: env.EXTERNAL_DB_DEFAULT_SCHEMA || 'public'
+        defaultSchema: config.externalDbDefaultSchema || 'public'
     }
 }
 
-async function createSDKMySQLConnection(env: Env): Promise<ConnectionDetails> {
+async function createSDKMySQLConnection(config: HandlerConfig): Promise<ConnectionDetails> {
     const client = new MySQLConnection(
         createMySqlConnection({
-            host: env.EXTERNAL_DB_HOST,
-            port: Number(env.EXTERNAL_DB_PORT),
-            user: env.EXTERNAL_DB_USER,
-            password: env.EXTERNAL_DB_PASS,
-            database: env.EXTERNAL_DB_DATABASE,
+            host: config.externalDbHost,
+            port: Number(config.externalDbPort),
+            user: config.externalDbUser,
+            password: config.externalDbPassword,
+            database: config.externalDbName,
         })
     );
 
     return {
         database: client,
-        defaultSchema: env.EXTERNAL_DB_DEFAULT_SCHEMA || 'public'
+        defaultSchema: config.externalDbDefaultSchema || 'public'
     }
 }
 
-async function createSDKMongoConnection(env: Env): Promise<ConnectionDetails> {
+async function createSDKMongoConnection(config: HandlerConfig): Promise<ConnectionDetails> {
     const client = new MongoDBConnection(
-        new MongoClient(env.EXTERNAL_DB_MONGODB_URI as string),
-        env.EXTERNAL_DB_DATABASE as string
+        new MongoClient(config.externalDbMongodbUri as string),
+        config.externalDbName as string
     );
 
     return {
         database: client,
-        defaultSchema: env.EXTERNAL_DB_DATABASE || ''
+        defaultSchema: config.externalDbName || ''
     }
 }
 
-async function createSDKTursoConnection(env: Env): Promise<ConnectionDetails> {
+async function createSDKTursoConnection(config: HandlerConfig): Promise<ConnectionDetails> {
     const client = new TursoConnection(createTursoConnection({ 
-        url: env.EXTERNAL_DB_TURSO_URI || '',
-        authToken: env.EXTERNAL_DB_TURSO_TOKEN || ''
+        url: config.externalDbTursoUri || '',
+        authToken: config.externalDbTursoToken || ''
     }));
 
     return {
         database: client,
-        defaultSchema: env.EXTERNAL_DB_DEFAULT_SCHEMA || 'main'
+        defaultSchema: config.externalDbDefaultSchema || 'main'
     }
 }
 
-async function createSDKCloudflareConnection(env: Env): Promise<ConnectionDetails> {
+async function createSDKCloudflareConnection(config: HandlerConfig): Promise<ConnectionDetails> {
     const client = new CloudflareD1Connection({
-        apiKey: env.EXTERNAL_DB_CLOUDFLARE_API_KEY as string,
-        accountId: env.EXTERNAL_DB_CLOUDFLARE_ACCOUNT_ID as string,
-        databaseId: env.EXTERNAL_DB_CLOUDFLARE_DATABASE_ID as string,
+        apiKey: config.externalDbCloudflareApiKey as string,
+        accountId: config.externalDbCloudflareAccountId as string,
+        databaseId: config.externalDbCloudflareDatabaseId as string,
     });
 
     return {
         database: client,
-        defaultSchema: env.EXTERNAL_DB_DEFAULT_SCHEMA || 'main'
+        defaultSchema: config.externalDbDefaultSchema || 'main'
     }
 }
 
-async function createSDKStarbaseConnection(env: Env): Promise<ConnectionDetails> {
+async function createSDKStarbaseConnection(config: HandlerConfig): Promise<ConnectionDetails> {
     const client = new StarbaseConnection({
-        apiKey: env.EXTERNAL_DB_STARBASEDB_URI as string,
-        url: env.EXTERNAL_DB_STARBASEDB_TOKEN as string,
+        apiKey: config.externalDbStarbaseUri as string,
+        url: config.externalDbStarbaseToken as string,
     });
 
     return {
         database: client,
-        defaultSchema: env.EXTERNAL_DB_DEFAULT_SCHEMA || 'main'
+        defaultSchema: config.externalDbDefaultSchema || 'main'
     }
 }
 
-export async function executeSDKQuery(sql: string, params: any | undefined, isRaw: boolean, dataSource?: DataSource, env?: Env): Promise<QueryResponse> {
+export async function executeSDKQuery(sql: string, params: any | undefined, isRaw: boolean, dataSource?: DataSource, config?: HandlerConfig): Promise<QueryResponse> {
     if (!dataSource) {
         console.error('Data source not found.')
         return []
@@ -283,23 +283,23 @@ export async function executeSDKQuery(sql: string, params: any | undefined, isRa
     
     // Initialize connection if it doesn't exist
     if (!globalConnection) {
-        if (env?.EXTERNAL_DB_TYPE === 'postgres') {
-            const { database } = await createSDKPostgresConnection(env)
+        if (config?.externalDbType === 'postgres') {
+            const { database } = await createSDKPostgresConnection(config)
             globalConnection = database;
-        } else if (env?.EXTERNAL_DB_TYPE === 'mysql' && env) {
-            const { database } = await createSDKMySQLConnection(env)
+        } else if (config?.externalDbType === 'mysql' && config) {
+            const { database } = await createSDKMySQLConnection(config)
             globalConnection = database;
-        } else if (env?.EXTERNAL_DB_TYPE === 'mongo' && env) {
-            const { database } = await createSDKMongoConnection(env)
+        } else if (config?.externalDbType === 'mongo' && config) {
+            const { database } = await createSDKMongoConnection(config)
             globalConnection = database;
-        } else if (env?.EXTERNAL_DB_TYPE === 'sqlite' && env?.EXTERNAL_DB_CLOUDFLARE_API_KEY && env) {
-            const { database } = await createSDKCloudflareConnection(env)
+        } else if (config?.externalDbType === 'sqlite' && config?.externalDbCloudflareApiKey && config) {
+            const { database } = await createSDKCloudflareConnection(config)
             globalConnection = database;
-        } else if (env?.EXTERNAL_DB_TYPE === 'sqlite' && env?.EXTERNAL_DB_STARBASEDB_URI && env) {
-            const { database } = await createSDKStarbaseConnection(env)
+        } else if (config?.externalDbType === 'sqlite' && config?.externalDbStarbaseUri && config) {
+            const { database } = await createSDKStarbaseConnection(config)
             globalConnection = database;
-        } else if (env?.EXTERNAL_DB_TYPE === 'sqlite' && env?.EXTERNAL_DB_TURSO_URI && env) {
-            const { database } = await createSDKTursoConnection(env)
+        } else if (config?.externalDbType === 'sqlite' && config?.externalDbTursoUri && config) {
+            const { database } = await createSDKTursoConnection(config)
             globalConnection = database;
         }
         
