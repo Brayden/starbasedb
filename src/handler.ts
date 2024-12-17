@@ -3,48 +3,22 @@ import { cors } from "hono/cors";
 import { createMiddleware } from "hono/factory";
 import { validator } from "hono/validator";
 
-import { DataSource, Source } from "./types";
+import { DataSource } from "./types";
 import { LiteREST } from "./literest";
-// import { executeQuery, executeTransaction } from "./operation";
+import { executeQuery, executeTransaction } from "./operation";
 import { createResponse, QueryRequest, QueryTransactionRequest } from "./utils";
-// import { handleApiRequest } from "./api";
-// import { dumpDatabaseRoute } from "./export/dump";
-// import { exportTableToJsonRoute } from "./export/json";
-// import { exportTableToCsvRoute } from "./export/csv";
-// import { importDumpRoute } from "./import/dump";
-// import { importTableFromJsonRoute } from "./import/json";
-// import { importTableFromCsvRoute } from "./import/csv";
-
-// export interface HandlerConfig {
-//   adminAuthorizationToken: string;
-//   outerbaseApiKey?: string;
-//   enableAllowlist?: boolean;
-//   enableRls?: boolean;
-
-//   externalDbType?: string;
-
-//   externalDbHost?: string;
-//   externalDbPort?: number;
-//   externalDbUser?: string;
-//   externalDbPassword?: string;
-//   externalDbName?: string;
-//   externalDbDefaultSchema?: string;
-
-//   externalDbMongodbUri?: string;
-
-//   externalDbTursoUri?: string;
-//   externalDbTursoToken?: string;
-
-//   externalDbCloudflareApiKey?: string;
-//   externalDbCloudflareAccountId?: string;
-//   externalDbCloudflareDatabaseId?: string;
-
-//   externalDbStarbaseUri?: string;
-//   externalDbStarbaseToken?: string;
-// }
+import { dumpDatabaseRoute } from "./export/dump";
+import { exportTableToJsonRoute } from "./export/json";
+import { exportTableToCsvRoute } from "./export/csv";
+import { importDumpRoute } from "./import/dump";
+import { importTableFromJsonRoute } from "./import/json";
+import { importTableFromCsvRoute } from "./import/csv";
+import handleStudioRequest from "./studio";
+import { corsPreflight } from "./cors";
 
 export interface StarbaseDBConfiguration {
-  role: "admin" | "user";
+  outerbaseApiKey?: string;
+  role: "admin" | "server" | "user";
   features?: {
     allowlist?: boolean;
     rls?: boolean;
@@ -53,6 +27,10 @@ export interface StarbaseDBConfiguration {
     websocket?: boolean;
     export?: boolean;
     import?: boolean;
+  };
+  studio?: {
+    username: string;
+    password: string;
   };
 }
 
@@ -68,34 +46,51 @@ export class StarbaseDB {
     this.dataSource = options.dataSource;
     this.config = options.config;
     this.liteREST = new LiteREST(this.dataSource, this.config);
+
+    // TODO; check how this is handled
+    if (this.dataSource.source === "external" && !this.dataSource.external) {
+      throw new Error("No external data sources available.");
+    }
   }
 
-  // private get isInternalSource() {
-  //   return createMiddleware(async (_, next) => {
-  //     if (this.dataSource.source !== Source.internal) {
-  //       return createResponse(
-  //         undefined,
-  //         "Function is only available for internal data source.",
-  //         400
-  //       );
-  //     }
+  /**
+   * Middleware to check if the request is coming from an internal source.
+   */
+  private get isInternalSource() {
+    return createMiddleware(async (_, next) => {
+      if (this.dataSource.source !== "internal") {
+        return createResponse(
+          undefined,
+          "Function is only available for internal data source.",
+          400
+        );
+      }
 
-  //     return next();
-  //   });
-  // }
+      return next();
+    });
+  }
 
-  // private get hasTableName() {
-  //   return validator("param", (params) => {
-  //     const tableName = params["tableName"];
+  /**
+   * Validator middleware to check if the request path has a valid :tableName parameter.
+   */
+  private get hasTableName() {
+    return validator("param", (params) => {
+      const tableName = params["tableName"].trim();
 
-  //     if (!tableName) {
-  //       return createResponse(undefined, "Table name is required", 400);
-  //     }
+      if (!tableName) {
+        return createResponse(undefined, "Table name is required", 400);
+      }
 
-  //     return { tableName };
-  //   });
-  // }
+      return { tableName };
+    });
+  }
 
+  /**
+   * Helper function to get a feature flag from the configuration.
+   * @param key The feature key to get.
+   * @param defaultValue The default value to return if the feature is not defined.
+   * @returns
+   */
   private getFeature(
     key: keyof NonNullable<StarbaseDBConfiguration["features"]>,
     defaultValue = true
@@ -103,8 +98,19 @@ export class StarbaseDB {
     return this.config.features?.[key] ?? !!defaultValue;
   }
 
-  public async handle(request: Request): Promise<Response> {
+  /**
+   * Main handler function for the StarbaseDB.
+   * @param request Request instance from the fetch event.
+   * @returns Promise<Response>
+   */
+  public async handle(
+    request: Request,
+    ctx: ExecutionContext
+  ): Promise<Response> {
     const app = new Hono();
+
+    // Non-blocking operation to remove expired cache entries from our DO
+    ctx.waitUntil(this.expireCache());
 
     // General 404 not found handler
     app.notFound(() => {
@@ -120,23 +126,20 @@ export class StarbaseDB {
       );
     });
 
-    // Allow CORS for all routes.
-    app.use(
-      cors({
-        origin: "*",
-        allowMethods: ["GET", "POST", "OPTIONS"],
-        allowHeaders: [
-          "Authorization",
-          "Content-Type",
-          "X-Starbase-Source",
-          "X-Data-Source",
-        ],
-        maxAge: 86400,
-      })
-    );
+    // CORS preflight handler.
+    app.options("*", () => corsPreflight());
+
+    if (this.getFeature("studio") && this.config.studio) {
+      app.get("/studio", async (c) => {
+        return handleStudioRequest(request, {
+          username: this.config.studio!.username,
+          password: this.config.studio!.password,
+        });
+      });
+    }
 
     if (this.getFeature("websocket")) {
-      app.all("/socket", async () => this.clientConnected());
+      app.all("/socket", () => this.clientConnected());
     }
 
     app.post("/query/raw", async (c) => this.queryRoute(c.req.raw, true));
@@ -200,80 +203,80 @@ export class StarbaseDB {
       );
     }
 
-    return createResponse(undefined, "Unknown operation", 400);
+    return app.fetch(request);
   }
 
-  // async queryRoute(request: Request, isRaw: boolean): Promise<Response> {
-  //   try {
-  //     const contentType = request.headers.get("Content-Type") || "";
-  //     if (!contentType.includes("application/json")) {
-  //       return createResponse(
-  //         undefined,
-  //         "Content-Type must be application/json.",
-  //         400
-  //       );
-  //     }
+  async queryRoute(request: Request, isRaw: boolean): Promise<Response> {
+    try {
+      const contentType = request.headers.get("Content-Type") || "";
+      if (!contentType.includes("application/json")) {
+        return createResponse(
+          undefined,
+          "Content-Type must be application/json.",
+          400
+        );
+      }
 
-  //     const { sql, params, transaction } =
-  //       (await request.json()) as QueryRequest & QueryTransactionRequest;
+      const { sql, params, transaction } =
+        (await request.json()) as QueryRequest & QueryTransactionRequest;
 
-  //     if (Array.isArray(transaction) && transaction.length) {
-  //       const queries = transaction.map((queryObj: any) => {
-  //         const { sql, params } = queryObj;
+      if (Array.isArray(transaction) && transaction.length) {
+        const queries = transaction.map((queryObj: any) => {
+          const { sql, params } = queryObj;
 
-  //         if (typeof sql !== "string" || !sql.trim()) {
-  //           throw new Error('Invalid or empty "sql" field in transaction.');
-  //         } else if (
-  //           params !== undefined &&
-  //           !Array.isArray(params) &&
-  //           typeof params !== "object"
-  //         ) {
-  //           throw new Error(
-  //             'Invalid "params" field in transaction. Must be an array or object.'
-  //           );
-  //         }
+          if (typeof sql !== "string" || !sql.trim()) {
+            throw new Error('Invalid or empty "sql" field in transaction.');
+          } else if (
+            params !== undefined &&
+            !Array.isArray(params) &&
+            typeof params !== "object"
+          ) {
+            throw new Error(
+              'Invalid "params" field in transaction. Must be an array or object.'
+            );
+          }
 
-  //         return { sql, params };
-  //       });
+          return { sql, params };
+        });
 
-  //       const response = await executeTransaction(
-  //         queries,
-  //         isRaw,
-  //         this.dataSource,
-  //         this.config
-  //       );
-  //       return createResponse(response, undefined, 200);
-  //     } else if (typeof sql !== "string" || !sql.trim()) {
-  //       return createResponse(undefined, 'Invalid or empty "sql" field.', 400);
-  //     } else if (
-  //       params !== undefined &&
-  //       !Array.isArray(params) &&
-  //       typeof params !== "object"
-  //     ) {
-  //       return createResponse(
-  //         undefined,
-  //         'Invalid "params" field. Must be an array or object.',
-  //         400
-  //       );
-  //     }
+        const response = await executeTransaction(
+          queries,
+          isRaw,
+          this.dataSource,
+          this.config
+        );
+        return createResponse(response, undefined, 200);
+      } else if (typeof sql !== "string" || !sql.trim()) {
+        return createResponse(undefined, 'Invalid or empty "sql" field.', 400);
+      } else if (
+        params !== undefined &&
+        !Array.isArray(params) &&
+        typeof params !== "object"
+      ) {
+        return createResponse(
+          undefined,
+          'Invalid "params" field. Must be an array or object.',
+          400
+        );
+      }
 
-  //     const response = await executeQuery(
-  //       sql,
-  //       params,
-  //       isRaw,
-  //       this.dataSource,
-  //       this.config
-  //     );
-  //     return createResponse(response, undefined, 200);
-  //   } catch (error: any) {
-  //     console.error("Query Route Error:", error);
-  //     return createResponse(
-  //       undefined,
-  //       error?.message || "An unexpected error occurred.",
-  //       500
-  //     );
-  //   }
-  // }
+      const response = await executeQuery(
+        sql,
+        params,
+        isRaw,
+        this.dataSource,
+        this.config
+      );
+      return createResponse(response, undefined, 200);
+    } catch (error: any) {
+      console.error("Query Route Error:", error);
+      return createResponse(
+        undefined,
+        error?.message || "An unexpected error occurred.",
+        500
+      );
+    }
+  }
 
   clientConnected() {
     const webSocketPair = new WebSocketPair();
@@ -298,5 +301,20 @@ export class StarbaseDB {
     });
 
     return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /**
+   *
+   */
+  private async expireCache() {
+    try {
+      const cleanupSQL = `DELETE FROM tmp_cache WHERE timestamp + (ttl * 1000) < ?`;
+      this.dataSource.rpc.executeQuery({
+        sql: cleanupSQL,
+        params: [Date.now()],
+      });
+    } catch (err) {
+      console.error("Error cleaning up expired cache entries:", err);
+    }
   }
 }

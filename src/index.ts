@@ -1,17 +1,18 @@
 import { createResponse } from "./utils";
-import handleStudioRequest from "./studio";
-import { Handler, HandlerConfig } from "./handler";
-import { DatabaseStub, DataSource, RegionLocationHint, Source } from "./types";
-import { corsPreflight } from "./cors";
-export { DatabaseDurableObject } from "./do";
+import { StarbaseDB, StarbaseDBConfiguration } from "./handler";
+import { DataSource, RegionLocationHint } from "./types";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+
+export { StarbaseDBDurableObject } from "./do";
 
 const DURABLE_OBJECT_ID = "sql-durable-object";
 
 export interface Env {
   ADMIN_AUTHORIZATION_TOKEN: string;
   CLIENT_AUTHORIZATION_TOKEN: string;
-  DATABASE_DURABLE_OBJECT: DurableObjectNamespace;
+  DATABASE_DURABLE_OBJECT: DurableObjectNamespace<
+    import("./do").StarbaseDBDurableObject
+  >;
   REGION: string;
 
   // Studio credentials
@@ -59,37 +60,8 @@ export default {
   async fetch(request, env, ctx): Promise<Response> {
     try {
       const url = new URL(request.url);
-      const pathname = url.pathname;
       const isWebSocket = request.headers.get("Upgrade") === "websocket";
       let jwtPayload;
-
-      // Authorize the request with CORS rules before proceeding.
-      if (request.method === "OPTIONS") {
-        const preflightResponse = corsPreflight(request);
-
-        if (preflightResponse) {
-          return preflightResponse;
-        }
-      }
-
-      /**
-       * If the request is a GET request to the /studio endpoint, we can handle the request
-       * directly in the Worker to avoid the need to deploy a separate Worker for the Studio.
-       * Studio provides a user interface to interact with the SQLite database in the Durable
-       * Object.
-       */
-      if (
-        env.STUDIO_USER &&
-        env.STUDIO_PASS &&
-        request.method === "GET" &&
-        pathname === "/studio"
-      ) {
-        return handleStudioRequest(request, {
-          username: env.STUDIO_USER,
-          password: env.STUDIO_PASS,
-          apiToken: env.ADMIN_AUTHORIZATION_TOKEN,
-        });
-      }
 
       /**
        * Prior to proceeding to the Durable Object, we can perform any necessary validation or
@@ -175,77 +147,94 @@ export default {
             })
           : env.DATABASE_DURABLE_OBJECT.get(id);
 
-      const source: Source =
-        (request.headers.get("X-Starbase-Source") as Source) ??
-        (url.searchParams.get("source") as Source) ??
-        "internal";
+      // Create a new RPC Session on the Durable Object.
+      using rpc = await stub.init();
+
+      // Get the source type from headers/query params.
+      const source = request.headers.get("X-Starbase-Source") || url.searchParams.get("source");
+
       const dataSource: DataSource = {
-        source: source,
-        request: request.clone(),
-        internalConnection: {
-          durableObject: stub as unknown as DatabaseStub,
-        },
-        externalConnection: {
-          outerbaseApiKey: env.OUTERBASE_API_KEY ?? "",
-        },
+        rpc,
+        source: source ? source.toLowerCase().trim() === "external" ? "external" : "internal" : "internal",
+        cache: request.headers.get("X-Starbase-Cache") === "true",
         context: {
           ...jwtPayload,
         },
       };
 
-      // Non-blocking operation to remove expired cache entries from our DO
-      expireCache(dataSource);
+      if (env.EXTERNAL_DB_TYPE === "postgres" || env.EXTERNAL_DB_TYPE === "mysql") {
+        dataSource.external = {
+          dialect: env.EXTERNAL_DB_TYPE,
+          host: env.EXTERNAL_DB_HOST!,
+          port: env.EXTERNAL_DB_PORT!,
+          user: env.EXTERNAL_DB_USER!,
+          password: env.EXTERNAL_DB_PASS!,
+          database: env.EXTERNAL_DB_DATABASE!,
+          defaultSchema: env.EXTERNAL_DB_DEFAULT_SCHEMA,
+        };
+      }
 
-      const config = {
-        adminAuthorizationToken: env.ADMIN_AUTHORIZATION_TOKEN,
+      if (env.EXTERNAL_DB_TYPE === "sqlite") {
+        if (env.EXTERNAL_DB_CLOUDFLARE_API_KEY) {
+          dataSource.external = {
+            dialect: "sqlite",
+            provider: "cloudflare-d1",
+            apiKey: env.EXTERNAL_DB_CLOUDFLARE_API_KEY,
+            accountId: env.EXTERNAL_DB_CLOUDFLARE_ACCOUNT_ID!,
+            databaseId: env.EXTERNAL_DB_CLOUDFLARE_DATABASE_ID!,
+          }
+        }
+
+        if (env.EXTERNAL_DB_STARBASEDB_URI) {
+          dataSource.external = {
+            dialect: "sqlite",
+            provider: "starbase",
+            apiKey: env.EXTERNAL_DB_STARBASEDB_URI,
+            token: env.EXTERNAL_DB_STARBASEDB_TOKEN!,
+            defaultSchema: env.EXTERNAL_DB_DEFAULT_SCHEMA,
+          }
+        }
+
+        if (env.EXTERNAL_DB_TURSO_URI) {
+          dataSource.external = {
+            dialect: "sqlite",
+            provider: "turso",
+            uri: env.EXTERNAL_DB_TURSO_URI,
+            token: env.EXTERNAL_DB_TURSO_TOKEN!,
+            defaultSchema: env.EXTERNAL_DB_DEFAULT_SCHEMA,
+          }
+        }
+      }
+
+      const config: StarbaseDBConfiguration = {
         outerbaseApiKey: env.OUTERBASE_API_KEY,
-        enableAllowlist: env.ENABLE_ALLOWLIST,
-        enableRls: env.ENABLE_RLS,
-        externalDbType: env.EXTERNAL_DB_TYPE,
-        externalDbHost: env.EXTERNAL_DB_HOST,
-        externalDbPort: env.EXTERNAL_DB_PORT,
-        externalDbUser: env.EXTERNAL_DB_USER,
-        externalDbPassword: env.EXTERNAL_DB_PASS,
-        externalDbName: env.EXTERNAL_DB_DATABASE,
-        externalDbDefaultSchema: env.EXTERNAL_DB_DEFAULT_SCHEMA,
-        externalDbMongodbUri: env.EXTERNAL_DB_MONGODB_URI,
-        externalDbTursoUri: env.EXTERNAL_DB_TURSO_URI,
-        externalDbTursoToken: env.EXTERNAL_DB_TURSO_TOKEN,
-        externalDbCloudflareApiKey: env.EXTERNAL_DB_CLOUDFLARE_API_KEY,
-        externalDbCloudflareAccountId: env.EXTERNAL_DB_CLOUDFLARE_ACCOUNT_ID,
-        externalDbCloudflareDatabaseId: env.EXTERNAL_DB_CLOUDFLARE_DATABASE_ID,
-        externalDbStarbaseUri: env.EXTERNAL_DB_STARBASEDB_URI,
-        externalDbStarbaseToken: env.EXTERNAL_DB_STARBASEDB_TOKEN,
-      } satisfies HandlerConfig;
+        role: 'admin',
+        features: {
+          allowlist: env.ENABLE_ALLOWLIST,
+          rls: env.ENABLE_RLS,
+          studio: false,
+        },
+      };
+
+      if (env.STUDIO_USER && env.STUDIO_PASS) {
+        config.features!.studio = true;
+        config.studio = {
+          username: env.STUDIO_USER,
+          password: env.STUDIO_PASS,
+        };
+      }
 
       // Return the final response to our user
-      return await new Handler({
+      return await new StarbaseDB({
         dataSource,
         config,
-      }).handle(request);
+      }).handle(request, ctx);
     } catch (error) {
       // Return error response to client
       return createResponse(
         undefined,
         error instanceof Error ? error.message : "An unexpected error occurred",
         400
-      );
-    }
-
-    function expireCache(dataSource: DataSource) {
-      ctx.waitUntil(
-        (async () => {
-          try {
-            const cleanupSQL = `DELETE FROM tmp_cache WHERE timestamp + (ttl * 1000) < ?`;
-            await dataSource.internalConnection?.durableObject.executeQuery(
-              cleanupSQL,
-              [Date.now()],
-              false
-            );
-          } catch (err) {
-            console.error("Error cleaning up expired cache entries:", err);
-          }
-        })()
       );
     }
   },

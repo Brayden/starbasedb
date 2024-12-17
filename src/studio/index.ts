@@ -1,7 +1,7 @@
 interface HandleStudioRequestOption {
     username: string,
     password: string,
-    apiToken: string;
+    // apiToken: string;
 }
 
 function createStudioHTML(apiToken: string): string {
