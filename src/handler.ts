@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { createMiddleware } from "hono/factory";
 import { validator } from "hono/validator";
 
@@ -15,6 +14,7 @@ import { importTableFromJsonRoute } from "./import/json";
 import { importTableFromCsvRoute } from "./import/csv";
 import { handleStudioRequest } from "./studio";
 import { corsPreflight } from "./cors";
+import { handleApiRequest } from "./api";
 
 export interface StarbaseDBConfiguration {
   outerbaseApiKey?: string;
@@ -204,6 +204,8 @@ export class StarbaseDB {
         }
       );
     }
+
+    app.all("/api/*", async (c) => handleApiRequest(c.req.raw));
 
     return app.fetch(request);
   }
