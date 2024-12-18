@@ -6,7 +6,7 @@ import { createClient as createTursoConnection } from "@libsql/client/web";
 // Import how we interact with the databases through the Outerbase SDK
 import {
   CloudflareD1Connection,
-  MongoDBConnection,
+  // MongoDBConnection,
   MySQLConnection,
   PostgreSQLConnection,
   StarbaseConnection,
@@ -50,12 +50,14 @@ export type ConnectionDetails = {
   defaultSchema: string;
 };
 
-async function beforeQuery(
-  sql: string,
-  params?: any[],
-  dataSource?: DataSource,
-  config?: StarbaseDBConfiguration
-): Promise<{ sql: string; params?: any[] }> {
+async function beforeQuery(opts: {
+  sql: string;
+  params?: unknown[];
+  dataSource?: DataSource;
+  config?: StarbaseDBConfiguration;
+}): Promise<{ sql: string; params?: unknown[] }> {
+  let { sql, params, dataSource, config } = opts;
+
   // ## DO NOT REMOVE: PRE QUERY HOOK ##
 
   return {
@@ -64,13 +66,14 @@ async function beforeQuery(
   };
 }
 
-async function afterQuery(
-  sql: string,
-  result: any,
-  isRaw: boolean,
-  dataSource?: DataSource,
-  config?: StarbaseDBConfiguration
-): Promise<any> {
+async function afterQuery(opts: {
+  sql: string;
+  result: any;
+  isRaw: boolean;
+  dataSource?: DataSource;
+  config?: StarbaseDBConfiguration;
+}): Promise<any> {
+  let { result, isRaw, dataSource, config } = opts;
   result = isRaw ? transformRawResults(result, "from") : result;
 
   // ## DO NOT REMOVE: POST QUERY HOOK ##
@@ -117,19 +120,21 @@ function transformRawResults(
 // sources we recommend you connect your database to Outerbase and provide the bases API key for queries
 // to be made. Otherwise, for supported data sources such as Postgres, MySQL, D1, StarbaseDB, Turso and Mongo
 // we can connect to the database directly and remove the additional hop to the Outerbase API.
-async function executeExternalQuery(
-  sql: string,
-  params: any,
-  dataSource: DataSource,
-  config: StarbaseDBConfiguration
-): Promise<any> {
+async function executeExternalQuery(opts: {
+  sql: string;
+  params: any;
+  dataSource: DataSource;
+  config: StarbaseDBConfiguration;
+}): Promise<any> {
+  let { sql, params, dataSource, config } = opts;
+
   if (!dataSource.external) {
     throw new Error("External connection not found.");
   }
 
   // If not an Outerbase API request, forward to external database.
   if (!config?.outerbaseApiKey) {
-    return await executeSDKQuery({ sql, params, dataSource, config });
+    return executeSDKQuery({ sql, params, dataSource, config });
   }
 
   // Convert params from array to object if needed
@@ -163,13 +168,15 @@ async function executeExternalQuery(
   return results.response.results?.items;
 }
 
-export async function executeQuery(
-  sql: string,
-  params: any | undefined,
-  isRaw: boolean,
-  dataSource?: DataSource,
-  config?: StarbaseDBConfiguration
-): Promise<QueryResponse> {
+export async function executeQuery(opts: {
+  sql: string;
+  params: unknown[] | undefined;
+  isRaw: boolean;
+  dataSource: DataSource;
+  config: StarbaseDBConfiguration;
+}): Promise<QueryResponse> {
+  let { sql, params, isRaw, dataSource, config } = opts;
+
   if (!dataSource) {
     console.error("Data source not found.");
     return [];
@@ -177,29 +184,28 @@ export async function executeQuery(
 
   try {
     // If the allowlist feature is enabled, we should verify the query is allowed before proceeding.
-    await isQueryAllowed(
-      sql,
-      config?.features?.allowlist ?? false,
+    await isQueryAllowed({
+      sql: sql,
+      isEnabled: config?.features?.allowlist ?? false,
       dataSource,
-      config
-    );
+      config,
+    });
 
     // If the row level security feature is enabled, we should apply our policies to this SQL statement.
-    sql = await applyRLS(
+    sql = await applyRLS({
       sql,
-      config?.features?.rls ?? false,
-      dataSource.external?.dialect,
+      isEnabled: config?.features?.rls ?? true,
       dataSource,
-      config
-    );
+      config,
+    });
 
     // Run the beforeQuery hook for any third party logic to be applied before execution.
-    const { sql: updatedSQL, params: updatedParams } = await beforeQuery(
+    const { sql: updatedSQL, params: updatedParams } = await beforeQuery({
       sql,
       params,
       dataSource,
-      config
-    );
+      config,
+    });
 
     // If the query was modified by RLS then we determine it isn't currently a valid candidate
     // for caching. In the future we will support queries impacted by RLS and caching their
@@ -211,36 +217,40 @@ export async function executeQuery(
         params: updatedParams,
         dataSource,
       });
-      
+
       if (cache) {
-        return cache;
+        return cache as QueryResponse;
       }
     }
 
-    let response;
+    let result;
 
     if (dataSource.source === "internal") {
-      response = await dataSource.rpc.executeQuery({
+      result = await dataSource.rpc.executeQuery({
         sql: updatedSQL,
         params: updatedParams,
-        isRaw,
       });
     } else {
-      response = await executeExternalQuery(
-        updatedSQL,
-        updatedParams,
-        isRaw,
+      result = await executeExternalQuery({
+        sql: updatedSQL,
+        params: updatedParams,
         dataSource,
-        config
-      );
+        config,
+      });
     }
 
     // If this is a cacheable query, this function will handle that logic.
     if (!isRaw) {
-      await afterQueryCache(sql, updatedParams, response, dataSource);
+      await afterQueryCache({ sql, params: updatedParams, result, dataSource });
     }
 
-    return await afterQuery(updatedSQL, response, isRaw, dataSource, config);
+    return await afterQuery({
+      sql: updatedSQL,
+      result,
+      isRaw,
+      dataSource,
+      config,
+    });
   } catch (error: any) {
     throw new Error(error.message ?? "An error occurred");
   }
@@ -249,8 +259,8 @@ export async function executeQuery(
 export async function executeTransaction(
   queries: { sql: string; params?: any[] }[],
   isRaw: boolean,
-  dataSource?: DataSource,
-  config?: StarbaseDBConfiguration
+  dataSource: DataSource,
+  config: StarbaseDBConfiguration
 ): Promise<QueryResponse> {
   if (!dataSource) {
     console.error("Data source not found.");
@@ -260,13 +270,13 @@ export async function executeTransaction(
   const results = [];
 
   for (const query of queries) {
-    const result = await executeQuery(
-      query.sql,
-      query.params,
+    const result = await executeQuery({
+      sql: query.sql,
+      params: query.params,
       isRaw,
       dataSource,
-      config
-    );
+      config,
+    });
     results.push(result);
   }
 
@@ -311,6 +321,7 @@ async function createSDKMySQLConnection(
   };
 }
 
+// TODO: Disabled Mongo connection for now since it doesn't support RLS / Allow List
 // async function createSDKMongoConnection(
 //   config: StarbaseDBConfiguration
 // ): Promise<ConnectionDetails> {
@@ -383,7 +394,7 @@ export async function executeSDKQuery(opts: {
     return [];
   }
 
-  let connection;
+  let connection: SqlConnection;
 
   if (external.dialect === "postgres") {
     const { database } = await createSDKPostgresConnection(external);

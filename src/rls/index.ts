@@ -118,12 +118,14 @@ async function loadPolicies(dataSource: DataSource): Promise<Policy[]> {
   }
 }
 
-export async function applyRLS(
-  sql: string,
-  isEnabled: boolean,
-  dataSource: DataSource,
-  config: StarbaseDBConfiguration
-): Promise<string> {
+export async function applyRLS(opts: {
+  sql: string;
+  isEnabled: boolean;
+  dataSource: DataSource;
+  config: StarbaseDBConfiguration;
+}): Promise<string> {
+  const { sql, isEnabled, dataSource, config } = opts;
+
   if (!isEnabled) return sql;
   if (!sql) {
     throw Error("No SQL query found in RLS plugin.");

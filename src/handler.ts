@@ -13,12 +13,12 @@ import { exportTableToCsvRoute } from "./export/csv";
 import { importDumpRoute } from "./import/dump";
 import { importTableFromJsonRoute } from "./import/json";
 import { importTableFromCsvRoute } from "./import/csv";
-import handleStudioRequest from "./studio";
+import { handleStudioRequest } from "./studio";
 import { corsPreflight } from "./cors";
 
 export interface StarbaseDBConfiguration {
   outerbaseApiKey?: string;
-  role: "admin" | "server" | "user";
+  role: "admin" | "client";
   features?: {
     allowlist?: boolean;
     rls?: boolean;
@@ -31,6 +31,7 @@ export interface StarbaseDBConfiguration {
   studio?: {
     username: string;
     password: string;
+    apiKey: string;
   };
 }
 
@@ -47,7 +48,6 @@ export class StarbaseDB {
     this.config = options.config;
     this.liteREST = new LiteREST(this.dataSource, this.config);
 
-    // TODO; check how this is handled
     if (this.dataSource.source === "external" && !this.dataSource.external) {
       throw new Error("No external data sources available.");
     }
@@ -108,6 +108,7 @@ export class StarbaseDB {
     ctx: ExecutionContext
   ): Promise<Response> {
     const app = new Hono();
+    const isUpgrade = request.headers.get("Upgrade") === "websocket";
 
     // Non-blocking operation to remove expired cache entries from our DO
     ctx.waitUntil(this.expireCache());
@@ -134,11 +135,12 @@ export class StarbaseDB {
         return handleStudioRequest(request, {
           username: this.config.studio!.username,
           password: this.config.studio!.password,
+          apiKey: this.config.studio!.apiKey,
         });
       });
     }
 
-    if (this.getFeature("websocket")) {
+    if (isUpgrade && this.getFeature("websocket")) {
       app.all("/socket", () => this.clientConnected());
     }
 
@@ -260,13 +262,13 @@ export class StarbaseDB {
         );
       }
 
-      const response = await executeQuery(
+      const response = await executeQuery({
         sql,
         params,
         isRaw,
-        this.dataSource,
-        this.config
-      );
+        dataSource: this.dataSource,
+        config: this.config,
+      });
       return createResponse(response, undefined, 200);
     } catch (error: any) {
       console.error("Query Route Error:", error);
@@ -278,7 +280,7 @@ export class StarbaseDB {
     }
   }
 
-  clientConnected() {
+  private clientConnected() {
     const webSocketPair = new WebSocketPair();
     const [client, server] = Object.values(webSocketPair);
 
@@ -288,12 +290,13 @@ export class StarbaseDB {
 
       if (action === "query") {
         const executeQueryWrapper = async () => {
-          const response = await executeQuery(
+          const response = await executeQuery({
             sql,
             params,
-            false,
-            this.dataSource
-          );
+            isRaw: false,
+            dataSource: this.dataSource,
+            config: this.config,
+          });
           server.send(JSON.stringify(response));
         };
         executeQueryWrapper();

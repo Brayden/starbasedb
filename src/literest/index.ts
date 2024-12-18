@@ -58,13 +58,13 @@ export class LiteREST {
       this.dataSource.source === "internal" ||
       this.dataSource.external?.dialect === "sqlite";
 
-    const schemaInfo = (await executeQuery(
-      query,
-      this.dataSource.source === "external" ? {} : [],
-      false,
-      this.dataSource,
-      this.config
-    )) as any[];
+    const schemaInfo = (await executeQuery({
+      sql: query,
+      params: [],
+      isRaw: false,
+      dataSource: this.dataSource,
+      config: this.config,
+    })) as any[];
 
     let pkColumns = [];
 
@@ -228,7 +228,7 @@ export class LiteREST {
     const pathParts = url.pathname.split("/").filter(Boolean);
 
     if (pathParts.length === 0) {
-      throw new Error("Invalid route");
+      throw new Error("Expected a table name in the path");
     }
 
     const tableName = this.sanitizeIdentifier(

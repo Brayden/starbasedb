@@ -124,8 +124,7 @@ export async function afterQueryCache(opts: {
         }
       : {
           sql: "INSERT INTO tmp_cache (timestamp, ttl, query, results) VALUES (?, ?, ?, ?)",
-          // TODO: Make TTL configurable
-          params: [timestamp, 60, sql, results],
+          params: [timestamp, dataSource.cacheTTL ?? 60, sql, results],
         };
 
     await dataSource.rpc.executeQuery({

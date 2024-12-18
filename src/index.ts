@@ -61,7 +61,43 @@ export default {
     try {
       const url = new URL(request.url);
       const isWebSocket = request.headers.get("Upgrade") === "websocket";
-      let jwtPayload;
+
+      let role: StarbaseDBConfiguration["role"] = "client";
+      let context = {};
+
+      async function authenticate(token: string) {
+        const isAdminAuthorization = token === env.ADMIN_AUTHORIZATION_TOKEN;
+        const isClientAuthorization = token === env.CLIENT_AUTHORIZATION_TOKEN;
+
+        // If not admin or client auth, check if JWT auth is available
+        if (!isAdminAuthorization && !isClientAuthorization) {
+          if (env.AUTH_JWT_SECRET && env.AUTH_JWKS_ENDPOINT) {
+            const { payload } = await jwtVerify(
+              token,
+              createRemoteJWKSet(new URL(env.AUTH_JWKS_ENDPOINT)),
+              {
+                algorithms: env.AUTH_ALGORITHM
+                  ? [env.AUTH_ALGORITHM]
+                  : undefined,
+              }
+            );
+
+            if (!payload.sub) {
+              throw new Error("Invalid JWT payload, subject not found.");
+            }
+
+            context = payload;
+          } else {
+            // If no JWT secret or JWKS endpoint is provided, then the request has no authorization.
+            throw new Error("Unauthorized request");
+          }
+        } else if (isAdminAuthorization) {
+          role = "admin";
+        }
+      }
+
+      // JWT Payload from Header or WebSocket query param.
+      let authenticationToken: string | null = null;
 
       /**
        * Prior to proceeding to the Durable Object, we can perform any necessary validation or
@@ -69,68 +105,25 @@ export default {
        * interact with the Durable Object.
        */
       if (!isWebSocket) {
-        const authorizationValue = request.headers.get("Authorization");
-
-        // The `AUTHORIZATION_TOKEN` is like an admin path of automatically authorizing the
-        // incoming request as verified. If this does not match then we next want to check
-        // if the `Authorization` header contains a JWT session token we can verify before
-        // allowing the user to proceed to our request handler.
-        if (
-          authorizationValue !== `Bearer ${env.ADMIN_AUTHORIZATION_TOKEN}` &&
-          authorizationValue !== `Bearer ${env.CLIENT_AUTHORIZATION_TOKEN}`
-        ) {
-          const authorizationWithoutBearer = authorizationValue?.replace(
-            "Bearer ",
-            ""
-          );
-
-          // If the above case failed (no admin or client token) and you're not using JWT authentication
-          // then we will just fail overall. Some form of Authorization is required to proceed.
-          if (
-            (!env.AUTH_JWT_SECRET && !env.AUTH_JWKS_ENDPOINT) ||
-            authorizationWithoutBearer === undefined
-          ) {
-            return createResponse(undefined, "Unauthorized request", 400);
-          }
-
-          if (env.AUTH_JWKS_ENDPOINT && env?.AUTH_ALGORITHM) {
-            try {
-              const JWKS = createRemoteJWKSet(new URL(env.AUTH_JWKS_ENDPOINT));
-              const { payload } = await jwtVerify(
-                authorizationWithoutBearer,
-                JWKS,
-                {
-                  algorithms: [env?.AUTH_ALGORITHM],
-                }
-              );
-
-              if (!payload.sub) {
-                return createResponse(undefined, "Unauthorized request", 401);
-              } else {
-                jwtPayload = payload;
-              }
-            } catch (error: any) {
-              console.error("JWT Verification failed: ", error.message);
-              throw new Error("JWT verification failed");
-            }
-          }
-        }
+        authenticationToken =
+          request.headers.get("Authorization")?.replace("Bearer ", "") ?? null;
       } else if (isWebSocket) {
-        /**
-         * Web socket connections cannot pass in an Authorization header into their requests,
-         * so we can use a query parameter to validate the connection.
-         */
-        const token = url.searchParams.get("token");
+        authenticationToken = url.searchParams.get("token");
+      }
 
-        if (
-          token !== env.ADMIN_AUTHORIZATION_TOKEN &&
-          token !== env.CLIENT_AUTHORIZATION_TOKEN
-        ) {
-          return new Response(
-            "WebSocket connections are not supported at this endpoint.",
-            { status: 440 }
-          );
-        }
+      // There must be some form of authentication token provided to proceed.
+      if (!authenticationToken) {
+        return createResponse(undefined, "Unauthorized request", 401);
+      }
+
+      try {
+        await authenticate(authenticationToken);
+      } catch (error: any) {
+        return createResponse(
+          undefined,
+          error?.message ?? "Unable to process request.",
+          400
+        );
       }
 
       /**
@@ -148,21 +141,30 @@ export default {
           : env.DATABASE_DURABLE_OBJECT.get(id);
 
       // Create a new RPC Session on the Durable Object.
-      using rpc = await stub.init();
+      const rpc = await stub.init();
 
       // Get the source type from headers/query params.
-      const source = request.headers.get("X-Starbase-Source") || url.searchParams.get("source");
+      const source =
+        request.headers.get("X-Starbase-Source") ||
+        url.searchParams.get("source"); // TODO: Should this come from here, or per-websocket message?
 
       const dataSource: DataSource = {
         rpc,
-        source: source ? source.toLowerCase().trim() === "external" ? "external" : "internal" : "internal",
+        source: source
+          ? source.toLowerCase().trim() === "external"
+            ? "external"
+            : "internal"
+          : "internal",
         cache: request.headers.get("X-Starbase-Cache") === "true",
         context: {
-          ...jwtPayload,
+          ...context,
         },
       };
 
-      if (env.EXTERNAL_DB_TYPE === "postgres" || env.EXTERNAL_DB_TYPE === "mysql") {
+      if (
+        env.EXTERNAL_DB_TYPE === "postgres" ||
+        env.EXTERNAL_DB_TYPE === "mysql"
+      ) {
         dataSource.external = {
           dialect: env.EXTERNAL_DB_TYPE,
           host: env.EXTERNAL_DB_HOST!,
@@ -182,7 +184,7 @@ export default {
             apiKey: env.EXTERNAL_DB_CLOUDFLARE_API_KEY,
             accountId: env.EXTERNAL_DB_CLOUDFLARE_ACCOUNT_ID!,
             databaseId: env.EXTERNAL_DB_CLOUDFLARE_DATABASE_ID!,
-          }
+          };
         }
 
         if (env.EXTERNAL_DB_STARBASEDB_URI) {
@@ -192,7 +194,7 @@ export default {
             apiKey: env.EXTERNAL_DB_STARBASEDB_URI,
             token: env.EXTERNAL_DB_STARBASEDB_TOKEN!,
             defaultSchema: env.EXTERNAL_DB_DEFAULT_SCHEMA,
-          }
+          };
         }
 
         if (env.EXTERNAL_DB_TURSO_URI) {
@@ -202,25 +204,24 @@ export default {
             uri: env.EXTERNAL_DB_TURSO_URI,
             token: env.EXTERNAL_DB_TURSO_TOKEN!,
             defaultSchema: env.EXTERNAL_DB_DEFAULT_SCHEMA,
-          }
+          };
         }
       }
 
       const config: StarbaseDBConfiguration = {
         outerbaseApiKey: env.OUTERBASE_API_KEY,
-        role: 'admin',
+        role,
         features: {
           allowlist: env.ENABLE_ALLOWLIST,
           rls: env.ENABLE_RLS,
-          studio: false,
         },
       };
 
       if (env.STUDIO_USER && env.STUDIO_PASS) {
-        config.features!.studio = true;
         config.studio = {
           username: env.STUDIO_USER,
           password: env.STUDIO_PASS,
+          apiKey: env.ADMIN_AUTHORIZATION_TOKEN,
         };
       }
 

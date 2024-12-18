@@ -12,7 +12,7 @@
     "@cloudflare/workers-types": "^4.20241216.0",
     "@types/pg": "^8.11.10",
     "typescript": "^5.7.2",
-    "wrangler": "^3.96.3"
+    "wrangler": "^3.96.0"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
