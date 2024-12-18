@@ -1,29 +1,29 @@
-import { DurableObject } from "cloudflare:workers";
-import { OperationQueueItem, QueryResponse } from "./operation";
-import { createResponse } from "./utils";
+import { DurableObject } from 'cloudflare:workers'
+import { OperationQueueItem, QueryResponse } from './operation'
+import { createResponse } from './utils'
 
 export class DatabaseDurableObject extends DurableObject {
     // Durable storage for the SQL database
-    public sql: SqlStorage;
-    public storage: DurableObjectStorage;
+    public sql: SqlStorage
+    public storage: DurableObjectStorage
 
     // Queue of operations to be processed, with each operation containing a list of queries to be executed
-    private operationQueue: Array<OperationQueueItem> = [];
+    private operationQueue: Array<OperationQueueItem> = []
 
     // Flag to indicate if an operation is currently being processed
-    private processingOperation: { value: boolean } = { value: false };
+    private processingOperation: { value: boolean } = { value: false }
 
-	/**
-	 * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
-	 * 	`DurableObjectStub::get` for a given identifier (no-op constructors can be omitted)
-	 *
-	 * @param ctx - The interface for interacting with Durable Object state
-	 * @param env - The interface to reference bindings declared in wrangler.toml
-	 */
+    /**
+     * The constructor is invoked once upon creation of the Durable Object, i.e. the first call to
+     * 	`DurableObjectStub::get` for a given identifier (no-op constructors can be omitted)
+     *
+     * @param ctx - The interface for interacting with Durable Object state
+     * @param env - The interface to reference bindings declared in wrangler.toml
+     */
     constructor(ctx: DurableObjectState, env: Env) {
-        super(ctx, env);
-        this.sql = ctx.storage.sql;
-        this.storage = ctx.storage;
+        super(ctx, env)
+        this.sql = ctx.storage.sql
+        this.storage = ctx.storage
 
         // Install default necessary `tmp_` tables for various features here.
         const cacheStatement = `
@@ -63,40 +63,53 @@ export class DatabaseDurableObject extends DurableObject {
      * from other service bindings (e.g. auth). This serves as an exposed function for
      * other service bindings to query the database without having to have knowledge of
      * the current operation queue or processing state.
-     * 
+     *
      * @param sql - The SQL query to execute.
      * @param params - Optional parameters for the SQL query.
      * @returns A response containing the query result or an error message.
      */
-    async executeExternalQuery(sql: string, params: any[] | undefined): Promise<any> {
+    async executeExternalQuery(
+        sql: string,
+        params: any[] | undefined
+    ): Promise<any> {
         try {
-            const queries = [{ sql, params }];
+            const queries = [{ sql, params }]
             const response = await this.enqueueOperation(
                 queries,
                 false,
                 false,
                 this.operationQueue,
-                () => this.processNextOperation(this.sql, this.operationQueue, this.ctx, this.processingOperation)
-            );
+                () =>
+                    this.processNextOperation(
+                        this.sql,
+                        this.operationQueue,
+                        this.ctx,
+                        this.processingOperation
+                    )
+            )
 
-            return response;
+            return response
         } catch (error: any) {
-            console.error('Execute External Query Error:', error);
-            return null;
+            console.error('Execute External Query Error:', error)
+            return null
         }
     }
 
-    public executeQuery(sql: string, params: any[] | undefined, isRaw: boolean): QueryResponse {
+    public executeQuery(
+        sql: string,
+        params: any[] | undefined,
+        isRaw: boolean
+    ): QueryResponse {
         try {
-            let cursor;
-            
+            let cursor
+
             if (params && params.length) {
-                cursor = this.sql.exec(sql, ...params);
+                cursor = this.sql.exec(sql, ...params)
             } else {
-                cursor = this.sql.exec(sql);
+                cursor = this.sql.exec(sql)
             }
 
-            let result;
+            let result
 
             if (isRaw) {
                 result = {
@@ -106,35 +119,38 @@ export class DatabaseDurableObject extends DurableObject {
                         rows_read: cursor.rowsRead,
                         rows_written: cursor.rowsWritten,
                     },
-                };        
+                }
             } else {
-                result = cursor.toArray();
+                result = cursor.toArray()
             }
 
-            return result;
+            return result
         } catch (error) {
-            console.error('SQL Execution Error:', error);
-            throw error;
+            console.error('SQL Execution Error:', error)
+            throw error
         }
     }
 
-    public executeTransaction(queries: { sql: string; params?: any[] }[], isRaw: boolean): any[] {
+    public executeTransaction(
+        queries: { sql: string; params?: any[] }[],
+        isRaw: boolean
+    ): any[] {
         return this.storage.transactionSync(() => {
-            const results = [];
+            const results = []
 
             try {
                 for (const queryObj of queries) {
-                    const { sql, params } = queryObj;
-                    const result = this.executeQuery(sql, params, isRaw);
-                    results.push(result);
+                    const { sql, params } = queryObj
+                    const result = this.executeQuery(sql, params, isRaw)
+                    results.push(result)
                 }
 
-                return results;
+                return results
             } catch (error) {
-                console.error('Transaction Execution Error:', error);
-                throw error;
+                console.error('Transaction Execution Error:', error)
+                throw error
             }
-        });
+        })
     }
 
     enqueueOperation(
@@ -143,41 +159,41 @@ export class DatabaseDurableObject extends DurableObject {
         isRaw: boolean,
         operationQueue: any[],
         processNextOperation: () => Promise<void>
-    ): Promise<{ result?: any, error?: string | undefined, status: number }> {
-        const MAX_WAIT_TIME = 25000;
+    ): Promise<{ result?: any; error?: string | undefined; status: number }> {
+        const MAX_WAIT_TIME = 25000
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
-                reject(createResponse(undefined, 'Operation timed out.', 503));
-            }, MAX_WAIT_TIME);
+                reject(createResponse(undefined, 'Operation timed out.', 503))
+            }, MAX_WAIT_TIME)
 
             operationQueue.push({
                 queries,
                 isTransaction,
                 isRaw,
                 resolve: (value: any) => {
-                    clearTimeout(timeout);
+                    clearTimeout(timeout)
 
                     resolve({
                         result: value,
                         error: undefined,
-                        status: 200
+                        status: 200,
                     })
                 },
                 reject: (reason?: any) => {
-                    clearTimeout(timeout);
+                    clearTimeout(timeout)
 
                     reject({
                         result: undefined,
                         error: reason ?? 'Operation failed.',
-                        status: 500
+                        status: 500,
                     })
-                }
-            });
+                },
+            })
 
             processNextOperation().catch((err) => {
-                console.error('Error processing operation queue:', err);
-            });
-        });
+                console.error('Error processing operation queue:', err)
+            })
+        })
     }
 
     async processNextOperation(
@@ -188,33 +204,39 @@ export class DatabaseDurableObject extends DurableObject {
     ) {
         if (processingOperation.value) {
             // Already processing an operation
-            return;
+            return
         }
 
         if (operationQueue.length === 0) {
             // No operations remaining to process
-            return;
+            return
         }
 
-        processingOperation.value = true;
-        const { queries, isTransaction, isRaw, resolve, reject } = operationQueue.shift()!;
+        processingOperation.value = true
+        const { queries, isTransaction, isRaw, resolve, reject } =
+            operationQueue.shift()!
 
         try {
-            let result;
+            let result
 
             if (isTransaction) {
-                result = await this.executeTransaction(queries, isRaw);
+                result = await this.executeTransaction(queries, isRaw)
             } else {
-                const { sql, params } = queries[0];
-                result = this.executeQuery(sql, params, isRaw);
+                const { sql, params } = queries[0]
+                result = this.executeQuery(sql, params, isRaw)
             }
 
-            resolve(result);
+            resolve(result)
         } catch (error: any) {
-            reject(error.message || 'Operation failed.');
+            reject(error.message || 'Operation failed.')
         } finally {
-            processingOperation.value = false;
-            await this.processNextOperation(sqlInstance, operationQueue, ctx, processingOperation);
+            processingOperation.value = false
+            await this.processNextOperation(
+                sqlInstance,
+                operationQueue,
+                ctx,
+                processingOperation
+            )
         }
     }
 }
