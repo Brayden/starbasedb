@@ -1,8 +1,11 @@
+import { Hono } from "hono";
+import { createMiddleware } from "hono/factory";
+import { validator } from "hono/validator";
+
 import { DataSource, Source } from "./types";
 import { LiteREST } from "./literest";
 import { executeQuery, executeTransaction } from "./operation";
 import { createResponse, QueryRequest, QueryTransactionRequest } from "./utils";
-import { Env } from './'
 import { handleApiRequest } from "./api";
 import { dumpDatabaseRoute } from "./export/dump";
 import { exportTableToJsonRoute } from "./export/json";
@@ -12,168 +15,241 @@ import { importTableFromJsonRoute } from "./import/json";
 import { importTableFromCsvRoute } from "./import/csv";
 
 export interface HandlerConfig {
-    adminAuthorizationToken: string;
-    outerbaseApiKey?: string;
-    enableAllowlist?: boolean;
-    enableRls?: boolean;
+  adminAuthorizationToken: string;
+  outerbaseApiKey?: string;
+  enableAllowlist?: boolean;
+  enableRls?: boolean;
 
-    externalDbType?: string;
+  externalDbType?: string;
 
-    externalDbHost?: string;
-    externalDbPort?: number;
-    externalDbUser?: string;
-    externalDbPassword?: string;
-    externalDbName?: string;
-    externalDbDefaultSchema?: string;
+  externalDbHost?: string;
+  externalDbPort?: number;
+  externalDbUser?: string;
+  externalDbPassword?: string;
+  externalDbName?: string;
+  externalDbDefaultSchema?: string;
 
-    externalDbMongodbUri?: string;
+  externalDbMongodbUri?: string;
 
-    externalDbTursoUri?: string;
-    externalDbTursoToken?: string;
+  externalDbTursoUri?: string;
+  externalDbTursoToken?: string;
 
-    externalDbCloudflareApiKey?: string;
-    externalDbCloudflareAccountId?: string;
-    externalDbCloudflareDatabaseId?: string;
+  externalDbCloudflareApiKey?: string;
+  externalDbCloudflareAccountId?: string;
+  externalDbCloudflareDatabaseId?: string;
 
-    externalDbStarbaseUri?: string;
-    externalDbStarbaseToken?: string;
+  externalDbStarbaseUri?: string;
+  externalDbStarbaseToken?: string;
 }
 
 export class Handler {
-    private liteREST?: LiteREST;
-    private dataSource?: DataSource;
-    private config?: HandlerConfig;
+  private dataSource: DataSource;
+  private config: HandlerConfig;
+  private liteREST: LiteREST;
 
-    constructor() { }
+  constructor(options: { dataSource: DataSource; config: HandlerConfig }) {
+    this.dataSource = options.dataSource;
+    this.config = options.config;
+    this.liteREST = new LiteREST(this.dataSource, this.config);
+  }
 
-    public async handle(request: Request, dataSource: DataSource, config: HandlerConfig): Promise<Response> {
-        this.dataSource = dataSource;
-        this.liteREST = new LiteREST(dataSource, config);
-        this.config = config;
-        const url = new URL(request.url);
+  private get isInternalSource() {
+    return createMiddleware(async (_, next) => {
+      if (this.dataSource.source !== Source.internal) {
+        return createResponse(
+          undefined,
+          "Function is only available for internal data source.",
+          400
+        );
+      }
 
-        if (request.method === 'POST' && url.pathname === '/query/raw') {
-            return this.queryRoute(request, true);
-        } else if (request.method === 'POST' && url.pathname === '/query') {
-            return this.queryRoute(request, false);
-        } else if (url.pathname === '/socket') {
-            return this.clientConnected();
-        } else if (url.pathname.startsWith('/rest')) {
-            return await this.liteREST.handleRequest(request);
-        } else if (request.method === 'GET' && url.pathname === '/export/dump') {
-            if (this.dataSource.source === Source.external) {
-                return createResponse(undefined, 'Function is only available for internal data source.', 400);
-            }
+      return next();
+    });
+  }
 
-            return dumpDatabaseRoute(this.dataSource);
-        } else if (request.method === 'GET' && url.pathname.startsWith('/export/json/')) {
-            if (this.dataSource.source === Source.external) {
-                return createResponse(undefined, 'Function is only available for internal data source.', 400);
-            }
+  private get hasTableName() {
+    return validator("param", (params) => {
+      const tableName = params["tableName"];
 
-            const tableName = url.pathname.split('/').pop();
-            if (!tableName) {
-                return createResponse(undefined, 'Table name is required', 400);
-            }
-            return exportTableToJsonRoute(tableName, this.dataSource);
-        } else if (request.method === 'GET' && url.pathname.startsWith('/export/csv/')) {
-            if (this.dataSource.source === Source.external) {
-                return createResponse(undefined, 'Function is only available for internal data source.', 400);
-            }
+      if (!tableName) {
+        return createResponse(undefined, "Table name is required", 400);
+      }
 
-            const tableName = url.pathname.split('/').pop();
-            if (!tableName) {
-                return createResponse(undefined, 'Table name is required', 400);
-            }
-            return exportTableToCsvRoute(tableName, this.dataSource);
-        } else if (request.method === 'POST' && url.pathname === '/import/dump') {
-            if (this.dataSource.source === Source.external) {
-                return createResponse(undefined, 'Function is only available for internal data source.', 400);
-            }
+      return { tableName };
+    });
+  }
 
-            return importDumpRoute(request, this.dataSource);
-        } else if (request.method === 'POST' && url.pathname.startsWith('/import/json/')) {
-            if (this.dataSource.source === Source.external) {
-                return createResponse(undefined, 'Function is only available for internal data source.', 400);
-            }
+  public async handle(request: Request): Promise<Response> {
+    const app = new Hono();
 
-            const tableName = url.pathname.split('/').pop();
-            if (!tableName) {
-                return createResponse(undefined, 'Table name is required', 400);
-            }
-            return importTableFromJsonRoute(tableName, request, this.dataSource);
-        } else if (request.method === 'POST' && url.pathname.startsWith('/import/csv/')) {
-            if (this.dataSource.source === Source.external) {
-                return createResponse(undefined, 'Function is only available for internal data source.', 400);
-            }
+    app.notFound(() => {
+      return createResponse(undefined, "Not found", 404);
+    });
 
-            const tableName = url.pathname.split('/').pop();
-            if (!tableName) {
-                return createResponse(undefined, 'Table name is required', 400);
-            }
-            return importTableFromCsvRoute(tableName, request, this.dataSource);
-        } else if (url.pathname.startsWith('/api')) {
-            return await handleApiRequest(request);
-        }
+    app.onError((error) => {
+      return createResponse(
+        undefined,
+        error?.message || "An unexpected error occurred.",
+        500
+      );
+    });
 
-        return createResponse(undefined, 'Unknown operation', 400);
-    }
+    app.all("/socket", async () => this.clientConnected());
 
-    async queryRoute(request: Request, isRaw: boolean): Promise<Response> {
-        try {
-            const contentType = request.headers.get('Content-Type') || '';
-            if (!contentType.includes('application/json')) {
-                return createResponse(undefined, 'Content-Type must be application/json.', 400);
-            }
-    
-            const { sql, params, transaction } = await request.json() as QueryRequest & QueryTransactionRequest;
-            
-            if (Array.isArray(transaction) && transaction.length) {
-                const queries = transaction.map((queryObj: any) => {
-                    const { sql, params } = queryObj;
+    app.post("/query/raw", async (c) => this.queryRoute(c.req.raw, true));
+    app.post("/query", async (c) => this.queryRoute(c.req.raw, false));
 
-                    if (typeof sql !== 'string' || !sql.trim()) {
-                        throw new Error('Invalid or empty "sql" field in transaction.');
-                    } else if (params !== undefined && !Array.isArray(params) && typeof params !== 'object') {
-                        throw new Error('Invalid "params" field in transaction. Must be an array or object.');
-                    }
+    app.all("/rest/*", async (c) => {
+      return this.liteREST.handleRequest(c.req.raw);
+    });
 
-                    return { sql, params };
-                });
+    app.get("/export/dump", this.isInternalSource, async () => {
+      return dumpDatabaseRoute(this.dataSource);
+    });
 
-                const response = await executeTransaction(queries, isRaw, this.dataSource, this.config);
-                return createResponse(response, undefined, 200);
-            } else if (typeof sql !== 'string' || !sql.trim()) {
-                return createResponse(undefined, 'Invalid or empty "sql" field.', 400);
-            } else if (params !== undefined && !Array.isArray(params) && typeof params !== 'object') {
-                return createResponse(undefined, 'Invalid "params" field. Must be an array or object.', 400);
-            }
+    app.get(
+      "/export/json/:tableName",
+      this.isInternalSource,
+      this.hasTableName,
+      async (c) => {
+        const tableName = c.req.valid("param").tableName;
+        return exportTableToJsonRoute(tableName, this.dataSource);
+      }
+    );
 
-            const response = await executeQuery(sql, params, isRaw, this.dataSource, this.config);
-            return createResponse(response, undefined, 200);
-        } catch (error: any) {
-            console.error('Query Route Error:', error);
-            return createResponse(undefined, error?.message || 'An unexpected error occurred.', 500);
-        }
-    }
+    app.get(
+      "/export/csv/:tableName",
+      this.isInternalSource,
+      this.hasTableName,
+      async (c) => {
+        const tableName = c.req.valid("param").tableName;
+        return exportTableToCsvRoute(tableName, this.dataSource);
+      }
+    );
 
-    clientConnected() {
-        const webSocketPair = new WebSocketPair();
-        const [client, server] = Object.values(webSocketPair);
+    app.post("/import/dump", this.isInternalSource, async (c) => {
+      return importDumpRoute(c.req.raw, this.dataSource);
+    });
 
-        server.accept();
-        server.addEventListener('message', event => {
-            const { sql, params, action } = JSON.parse(event.data as string);
+    app.post(
+      "/import/json/:tableName",
+      this.isInternalSource,
+      this.hasTableName,
+      async (c) => {
+        const tableName = c.req.valid("param").tableName;
+        return importTableFromJsonRoute(tableName, request, this.dataSource);
+      }
+    );
 
-            if (action === 'query') {
-                const executeQueryWrapper = async () => {
-                    const response = await executeQuery(sql, params, false, this.dataSource);
-                    server.send(JSON.stringify(response));
-                };
-                executeQueryWrapper();
-            }
+    app.post(
+      "/import/csv/:tableName",
+      this.isInternalSource,
+      this.hasTableName,
+      async (c) => {
+        const tableName = c.req.valid("param").tableName;
+        return importTableFromCsvRoute(tableName, request, this.dataSource);
+      }
+    );
+
+    app.all("/api/*", async (c) => handleApiRequest(c.req.raw));
+
+    return app.fetch(request);
+  }
+
+  async queryRoute(request: Request, isRaw: boolean): Promise<Response> {
+    try {
+      const contentType = request.headers.get("Content-Type") || "";
+      if (!contentType.includes("application/json")) {
+        return createResponse(
+          undefined,
+          "Content-Type must be application/json.",
+          400
+        );
+      }
+
+      const { sql, params, transaction } =
+        (await request.json()) as QueryRequest & QueryTransactionRequest;
+
+      if (Array.isArray(transaction) && transaction.length) {
+        const queries = transaction.map((queryObj: any) => {
+          const { sql, params } = queryObj;
+
+          if (typeof sql !== "string" || !sql.trim()) {
+            throw new Error('Invalid or empty "sql" field in transaction.');
+          } else if (
+            params !== undefined &&
+            !Array.isArray(params) &&
+            typeof params !== "object"
+          ) {
+            throw new Error(
+              'Invalid "params" field in transaction. Must be an array or object.'
+            );
+          }
+
+          return { sql, params };
         });
 
-        return new Response(null, { status: 101, webSocket: client });
+        const response = await executeTransaction(
+          queries,
+          isRaw,
+          this.dataSource,
+          this.config
+        );
+        return createResponse(response, undefined, 200);
+      } else if (typeof sql !== "string" || !sql.trim()) {
+        return createResponse(undefined, 'Invalid or empty "sql" field.', 400);
+      } else if (
+        params !== undefined &&
+        !Array.isArray(params) &&
+        typeof params !== "object"
+      ) {
+        return createResponse(
+          undefined,
+          'Invalid "params" field. Must be an array or object.',
+          400
+        );
+      }
+
+      const response = await executeQuery(
+        sql,
+        params,
+        isRaw,
+        this.dataSource,
+        this.config
+      );
+      return createResponse(response, undefined, 200);
+    } catch (error: any) {
+      console.error("Query Route Error:", error);
+      return createResponse(
+        undefined,
+        error?.message || "An unexpected error occurred.",
+        500
+      );
     }
+  }
+
+  clientConnected() {
+    const webSocketPair = new WebSocketPair();
+    const [client, server] = Object.values(webSocketPair);
+
+    server.accept();
+    server.addEventListener("message", (event) => {
+      const { sql, params, action } = JSON.parse(event.data as string);
+
+      if (action === "query") {
+        const executeQueryWrapper = async () => {
+          const response = await executeQuery(
+            sql,
+            params,
+            false,
+            this.dataSource
+          );
+          server.send(JSON.stringify(response));
+        };
+        executeQueryWrapper();
+      }
+    });
+
+    return new Response(null, { status: 101, webSocket: client });
+  }
 }
