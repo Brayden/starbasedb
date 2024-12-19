@@ -102,7 +102,7 @@ export class StarbaseDBDurableObject extends DurableObject {
   //   }
   // }
 
-  public async executeRawQuery<
+  private async executeRawQuery<
     T extends Record<string, SqlStorageValue> = Record<string, SqlStorageValue>
   >(opts: { sql: string; params?: unknown[] }) {
     const { sql, params } = opts;
@@ -116,15 +116,7 @@ export class StarbaseDBDurableObject extends DurableObject {
         cursor = this.sql.exec<T>(sql);
       }
 
-      return {
-        cursor,
-        columns: cursor.columnNames,
-        rows: Array.from(cursor.raw()),
-        meta: {
-          rows_read: cursor.rowsRead,
-          rows_written: cursor.rowsWritten,
-        },
-      };
+      return cursor;
     } catch (error) {
       console.error("SQL Execution Error:", error);
       throw error;
@@ -136,13 +128,20 @@ export class StarbaseDBDurableObject extends DurableObject {
     params?: unknown[];
     isRaw?: boolean;
   }) {
-    const result = await this.executeRawQuery(opts);
-
+    const cursor = await this.executeRawQuery(opts);
+    
     if (opts.isRaw) {
-      return result;
+      return {
+        columns: cursor.columnNames,
+        rows: Array.from(cursor.raw()),
+        meta: {
+          rows_read: cursor.rowsRead,
+          rows_written: cursor.rowsWritten,
+        },
+      };
     }
 
-    return result.cursor.toArray();
+    return cursor.toArray();
   }
 
   public executeTransaction(

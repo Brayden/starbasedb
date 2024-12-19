@@ -243,12 +243,13 @@ export class StarbaseDB {
           return { sql, params };
         });
 
-        const response = await executeTransaction(
+        const response = await executeTransaction({
           queries,
           isRaw,
-          this.dataSource,
-          this.config
-        );
+          dataSource: this.dataSource,
+          config: this.config,
+        });
+        
         return createResponse(response, undefined, 200);
       } else if (typeof sql !== "string" || !sql.trim()) {
         return createResponse(undefined, 'Invalid or empty "sql" field.', 400);

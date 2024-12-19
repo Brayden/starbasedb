@@ -182,86 +182,85 @@ export async function executeQuery(opts: {
     return [];
   }
 
-  try {
-    // If the allowlist feature is enabled, we should verify the query is allowed before proceeding.
-    await isQueryAllowed({
-      sql: sql,
-      isEnabled: config?.features?.allowlist ?? false,
-      dataSource,
-      config,
-    });
+  // If the allowlist feature is enabled, we should verify the query is allowed before proceeding.
+  await isQueryAllowed({
+    sql: sql,
+    isEnabled: config?.features?.allowlist ?? false,
+    dataSource,
+    config,
+  });
 
-    // If the row level security feature is enabled, we should apply our policies to this SQL statement.
-    sql = await applyRLS({
-      sql,
-      isEnabled: config?.features?.rls ?? true,
-      dataSource,
-      config,
-    });
+  // If the row level security feature is enabled, we should apply our policies to this SQL statement.
+  sql = await applyRLS({
+    sql,
+    isEnabled: config?.features?.rls ?? true,
+    dataSource,
+    config,
+  });
 
-    // Run the beforeQuery hook for any third party logic to be applied before execution.
-    const { sql: updatedSQL, params: updatedParams } = await beforeQuery({
-      sql,
-      params,
-      dataSource,
-      config,
-    });
+  // Run the beforeQuery hook for any third party logic to be applied before execution.
+  const { sql: updatedSQL, params: updatedParams } = await beforeQuery({
+    sql,
+    params,
+    dataSource,
+    config,
+  });
 
-    // If the query was modified by RLS then we determine it isn't currently a valid candidate
-    // for caching. In the future we will support queries impacted by RLS and caching their
-    // results.
-    if (!isRaw) {
-      // If a cached version of this query request exists, this function will fetch the cached results.
-      const cache = await beforeQueryCache({
-        sql: updatedSQL,
-        params: updatedParams,
-        dataSource,
-      });
-
-      if (cache) {
-        return cache as QueryResponse;
-      }
-    }
-
-    let result;
-
-    if (dataSource.source === "internal") {
-      result = await dataSource.rpc.executeQuery({
-        sql: updatedSQL,
-        params: updatedParams,
-      });
-    } else {
-      result = await executeExternalQuery({
-        sql: updatedSQL,
-        params: updatedParams,
-        dataSource,
-        config,
-      });
-    }
-
-    // If this is a cacheable query, this function will handle that logic.
-    if (!isRaw) {
-      await afterQueryCache({ sql, params: updatedParams, result, dataSource });
-    }
-
-    return await afterQuery({
+  // If the query was modified by RLS then we determine it isn't currently a valid candidate
+  // for caching. In the future we will support queries impacted by RLS and caching their
+  // results.
+  if (!isRaw) {
+    // If a cached version of this query request exists, this function will fetch the cached results.
+    const cache = await beforeQueryCache({
       sql: updatedSQL,
-      result,
+      params: updatedParams,
+      dataSource,
+    });
+
+    if (cache) {
+      return cache as QueryResponse;
+    }
+  }
+
+  let result;
+
+  if (dataSource.source === "internal") {
+    result = await dataSource.rpc.executeQuery({
+      sql: updatedSQL,
+      params: updatedParams,
       isRaw,
+    });
+  } else {
+    result = await executeExternalQuery({
+      sql: updatedSQL,
+      params: updatedParams,
       dataSource,
       config,
     });
-  } catch (error: any) {
-    throw new Error(error.message ?? "An error occurred");
   }
+
+  // If this is a cacheable query, this function will handle that logic.
+  if (!isRaw) {
+    await afterQueryCache({ sql, params: updatedParams, result, dataSource });
+  }
+
+  return await afterQuery({
+    sql: updatedSQL,
+    result,
+    isRaw,
+    dataSource,
+    config,
+  });
 }
 
-export async function executeTransaction(
-  queries: { sql: string; params?: any[] }[],
-  isRaw: boolean,
-  dataSource: DataSource,
-  config: StarbaseDBConfiguration
-): Promise<QueryResponse> {
+export async function executeTransaction(opts: {
+  queries: { sql: string; params?: any[] }[];
+  isRaw: boolean;
+  dataSource: DataSource;
+  config: StarbaseDBConfiguration;
+}): Promise<QueryResponse> {
+  const { queries, isRaw, dataSource, config } = opts;
+
   if (!dataSource) {
     console.error("Data source not found.");
     return [];
@@ -277,6 +276,7 @@ export async function executeTransaction(
       dataSource,
       config,
     });
+
     results.push(result);
   }
 
