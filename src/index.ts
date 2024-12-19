@@ -2,6 +2,7 @@ import { createResponse } from "./utils";
 import { StarbaseDB, StarbaseDBConfiguration } from "./handler";
 import { DataSource, RegionLocationHint } from "./types";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { handleStudioRequest } from "./studio";
 
 export { StarbaseDBDurableObject } from "./do";
 
@@ -64,6 +65,22 @@ export default {
 
       let role: StarbaseDBConfiguration["role"] = "client";
       let context = {};
+
+      // Handle Studio requests before auth checks in the worker.
+      // StarbaseDB can handle this for us, but we need to handle it 
+      // here before auth checks.
+      if (
+        env.STUDIO_USER &&
+        env.STUDIO_PASS &&
+        request.method === "GET" &&
+        url.pathname === "/studio"
+      ) {
+        return handleStudioRequest(request, {
+          username: env.STUDIO_USER,
+          password: env.STUDIO_PASS,
+          apiKey: env.ADMIN_AUTHORIZATION_TOKEN,
+        });
+      }
 
       async function authenticate(token: string) {
         const isAdminAuthorization = token === env.ADMIN_AUTHORIZATION_TOKEN;
@@ -214,22 +231,17 @@ export default {
         features: {
           allowlist: env.ENABLE_ALLOWLIST,
           rls: env.ENABLE_RLS,
+          studio: false, // This is handled above in the worker flow.
         },
       };
 
-      if (env.STUDIO_USER && env.STUDIO_PASS) {
-        config.studio = {
-          username: env.STUDIO_USER,
-          password: env.STUDIO_PASS,
-          apiKey: env.ADMIN_AUTHORIZATION_TOKEN,
-        };
-      }
-
-      // Return the final response to our user
-      return await new StarbaseDB({
+      const starbase = new StarbaseDB({
         dataSource,
         config,
-      }).handle(request, ctx);
+      });
+
+      // Return the final response to our user
+      return await starbase.handle(request, ctx);
     } catch (error) {
       // Return error response to client
       return createResponse(
